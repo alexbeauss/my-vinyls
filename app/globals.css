@@ -25,3 +25,44 @@ body {
     text-wrap: balance;
   }
 }
+#scanner-overlay {
+  position: absolute;
+  top: 25%;
+  left: 25%;
+  width: 50%;
+  height: 50%;
+  border: 2px solid red;
+  z-index: 1; /* Au-dessus de la vidéo */
+}
+/* Ajoutez ce CSS dans votre fichier de styles ou dans un <style> dans la page */
+#interactive {
+  width: 300px; /* largeur réduite de la zone de scan */
+  height: 200px; /* hauteur réduite de la zone de scan */
+  margin: auto;
+  position: relative;
+  border: 2px solid #000; /* optionnel, pour afficher une bordure autour du scanner */
+}
+
+#interactive video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Pour remplir la zone tout en gardant les proportions */
+}
+
+.vinyl-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.vinyl-item {
+  background-color: #f9f9f9;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.vinyl-item img {
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
