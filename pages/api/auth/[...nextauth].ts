@@ -2,17 +2,26 @@ import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { PrismaClient } from '@prisma/client';
+import { JWT } from "next-auth/jwt"; // Import the JWT type from next-auth
+import { Session } from "next-auth"; // Import the Session type
 
 // Initialize Prisma Client
 const prisma = new PrismaClient();
+
+// Extend the Session type to include userId
+declare module "next-auth" {
+  interface Session {
+    userId: string; // Add the userId field to the session
+  }
+}
 
 // Define the authOptions object
 export const authOptions = {
   debug: true, // Enable debug logs
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     }),
   ],
   adapter: PrismaAdapter(prisma), // Use Prisma to store users
@@ -28,23 +37,22 @@ export const authOptions = {
       },
     },
   },
+  
   session: {
     strategy: 'jwt', // Using JWT strategy
     maxAge: 30 * 24 * 60 * 60, // Session will expire after 30 days
   },
   callbacks: {
-    async jwt({ token, user }) {
-      // Persist user information in the JWT token on sign in
+    async jwt({ token, user }: { token: JWT; user?: any }) {
+      // Persist user information in the JWT token on sign-in
       if (user) {
-        token.userId = user.id;
+        token.userId = String(user.id); // Attach user ID to the JWT token
       }
-      // Log the token to verify that userId is being set correctly
-      console.log('JWT Token:', token);
-      return token; // Ensure the token is returned
+      return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: Session; token: JWT }) {
       // Attach userId from the token to the session
-      if (token && token.userId) {
+      if (token && typeof token.userId === 'string') {
         session.userId = token.userId;
       } else {
         console.error('No userId found in token:', token);
