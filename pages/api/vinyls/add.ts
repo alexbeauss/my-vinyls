@@ -1,10 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]'; // Adjust path if necessary
+import { NextApiRequest, NextApiResponse } from 'next'; // Import types for API request and response
 
 const prisma = new PrismaClient();
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) { // Explicitly type req and res
   if (req.method === 'POST') {
     const { barcode, title, year, thumbnail } = req.body;
 

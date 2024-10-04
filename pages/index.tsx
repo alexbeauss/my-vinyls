@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import Quagga from 'quagga';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios'; // Import AxiosError for proper type handling
 import LoginButton from '../components/LoginButton';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from './api/auth/[...nextauth]';
+import { GetServerSidePropsContext } from 'next'; // Import the context type
+
+// Define an interface for the error response from the server
+interface ErrorResponse {
+  error: string; // Adjust this field according to the actual error structure
+}
 
 // Fetch session on the server side using getServerSideProps
-export async function getServerSideProps(context) {
+export async function getServerSideProps(context: GetServerSidePropsContext) {
   const session = await getServerSession(context.req, context.res, authOptions);
   console.log('Server-side session:', session); // For debugging purposes
 
@@ -17,15 +23,14 @@ export async function getServerSideProps(context) {
   };
 }
 
-
-export default function Home(session) {
-  const [vinylCollection, setVinylCollection] = useState([]);
+export default function Home(session: any) { // You might want to define a proper type for session
+  const [vinylCollection, setVinylCollection] = useState<any[]>([]);
   const [scanning, setScanning] = useState(false);
-  const [scannedData, setScannedData] = useState(null);
-  const [discogsData, setDiscogsData] = useState(null);
-  const [error, setError] = useState(null);
+  const [scannedData, setScannedData] = useState<string | null>(null);
+  const [discogsData, setDiscogsData] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null); // Specify that error can be a string or null
 
-  console.log('Session:', session ); // For debugging purposes
+  console.log('Session:', session); // For debugging purposes
 
   // Function to start the scanner
   const startScanner = () => {
@@ -84,7 +89,7 @@ export default function Home(session) {
   }, [scanning]);
 
   // Function to fetch Discogs data via their API
-  const fetchDiscogsData = async (barcode) => {
+  const fetchDiscogsData = async (barcode: string) => {
     const token = process.env.NEXT_PUBLIC_DISCOGS_API_TOKEN;
     try {
       const response = await axios.get(`https://api.discogs.com/database/search?barcode=${barcode}&token=${token}`);
@@ -100,50 +105,57 @@ export default function Home(session) {
         setDiscogsData(null);
       }
     } catch (err) {
+      const axiosError = err as AxiosError; // Rename to avoid conflict
       setError("Erreur lors de la récupération des données Discogs.");
-      console.error(err);
+      console.error(axiosError); // Now this will have proper typing
     }
   };
 
   // Function to add vinyl to the collection
-const addVinyl = async () => {
-  if (!discogsData) return;
+  const addVinyl = async () => {
+    if (!discogsData) return;
 
-  try {
-    const newVinyl = await axios.post('/api/vinyls/add', {
-      barcode: scannedData,
-      title: discogsData.title,
-      year: discogsData.year,
-      thumbnail: discogsData.thumbnail,
-      userId: session?.user?.id, // Use session from props
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${session?.token}`, // Pass the session token if available
+    try {
+      const newVinyl = await axios.post('/api/vinyls/add', {
+        barcode: scannedData,
+        title: discogsData.title,
+        year: discogsData.year,
+        thumbnail: discogsData.thumbnail,
+        userId: session?.user?.id, // Use session from props
       },
-      withCredentials: true, // Send cookies if necessary
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${session?.token}`, // Pass the session token if available
+        },
+        withCredentials: true, // Send cookies if necessary
+      });
 
-    console.log("Vinyl ajouté : ", newVinyl.data);
+      console.log("Vinyl ajouté : ", newVinyl.data);
 
-    // Fetch the updated vinyl collection
-    const vinyls = await axios.get('/api/vinyls');
-    setVinylCollection(vinyls.data);
+      // Fetch the updated vinyl collection
+      const vinyls = await axios.get('/api/vinyls');
+      setVinylCollection(vinyls.data);
 
-    // Reset the scanned data and discogs data after adding the vinyl
-    setScannedData(null);
-    setDiscogsData(null);
+      // Reset the scanned data and discogs data after adding the vinyl
+      setScannedData(null);
+      setDiscogsData(null);
 
-  } catch (error) {
-    // Check for specific error response
-    if (error.response && error.response.status === 409) {
-      setError(error.response.data.error); // Display error message from the server
-    } else {
-      setError("Erreur lors de l'ajout du vinyle."); // General error message
-      console.error('Erreur lors de l\'ajout du vinyle:', error);
+    } catch (err) {
+      const axiosError = err as AxiosError; // Rename to avoid conflict
+      // Check for specific error response
+      if (axiosError.response) {
+        const errorData = axiosError.response.data as ErrorResponse; // Cast to your error response interface
+        if (axiosError.response.status === 409) {
+          setError(errorData.error); // Display error message from the server
+        } else {
+          setError("Erreur lors de l'ajout du vinyle."); // General error message
+        }
+      } else {
+        setError("Erreur lors de l'ajout du vinyle."); // Handle case where response is undefined
+      }
+      console.error('Erreur lors de l\'ajout du vinyle:', axiosError);
     }
-  }
-};
+  };
 
   // Function to fetch the user's vinyl collection
   const fetchVinyls = async () => {
@@ -151,7 +163,8 @@ const addVinyl = async () => {
       const response = await axios.get('/api/vinyls');
       setVinylCollection(response.data);
     } catch (err) {
-      console.error('Erreur lors de la récupération des vinyles:', err);
+      const axiosError = err as AxiosError; // Rename to avoid conflict
+      console.error('Erreur lors de la récupération des vinyles:', axiosError);
     }
   };
 
