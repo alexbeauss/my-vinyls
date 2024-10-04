@@ -40,7 +40,7 @@ export const authOptions: NextAuthOptions = {
     sessionToken: {
       name: `next-auth.session-token`,
       options: {
-        httpOnly: true,
+        httpsOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax', // Adjust based on your domain setup
         path: '/',
