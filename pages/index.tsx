@@ -4,11 +4,38 @@ import axios, { AxiosError } from 'axios'; // Import AxiosError for proper type 
 import LoginButton from '../components/LoginButton';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from './api/auth/[...nextauth]';
-import { GetServerSidePropsContext } from 'next'; // Import the context type
+import { GetServerSidePropsContext } from 'next';
+import { Session } from 'next-auth';
+
+// Define the interfaces
+interface UserWithId {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  id: string; // Add the 'id' field here
+}
+
+interface SessionWithId extends Session {
+  user: UserWithId;
+  token: string; // Add token field
+}
+
+interface Vinyl {
+  id: string;
+  title: string;
+  year: string;
+  thumbnail: string;
+}
+
+interface DiscogsData {
+  title: string;
+  year: string;
+  thumbnail: string;
+}
 
 // Define an interface for the error response from the server
 interface ErrorResponse {
-  error: string; // Adjust this field according to the actual error structure
+  error: string;
 }
 
 // Fetch session on the server side using getServerSideProps
@@ -23,11 +50,11 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
   };
 }
 
-export default function Home(session: any) { // You might want to define a proper type for session
-  const [vinylCollection, setVinylCollection] = useState<any[]>([]);
+export default function Home({ session }: { session: SessionWithId | null }) {
+  const [vinylCollection, setVinylCollection] = useState<Vinyl[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
-  const [discogsData, setDiscogsData] = useState<any | null>(null);
+  const [discogsData, setDiscogsData] = useState<DiscogsData | null>(null);
   const [error, setError] = useState<string | null>(null); // Specify that error can be a string or null
 
   console.log('Session:', session); // For debugging purposes
@@ -107,7 +134,7 @@ export default function Home(session: any) { // You might want to define a prope
     } catch (err) {
       const axiosError = err as AxiosError; // Rename to avoid conflict
       setError("Erreur lors de la récupération des données Discogs.");
-      console.error(axiosError); // Now this will have proper typing
+      console.error(axiosError);
     }
   };
 
