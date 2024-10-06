@@ -167,4 +167,42 @@ export default function Home() {
     } catch (err) {
       const axiosError = err as AxiosError;
       if (axiosError.response) {
-        const errorData = axiosError.response.data
+        const errorData = axiosError.response.data as ErrorResponse;
+        setError(errorData.error);
+      } else {
+        setError('Erreur lors de l\'ajout du vinyle.');
+      }
+    }
+  };
+
+  return (
+    <div>
+      {!session ? (
+        <LoginButton />
+      ) : (
+        <div>
+          <div id="interactive" className="viewport" />
+
+          {scannedData && discogsData && (
+            <div>
+              <h2>Vinyl Scanné:</h2>
+              <Image 
+                src={discogsData.thumbnail || ''} 
+                alt="thumbnail" 
+                width={150} 
+                height={150} 
+                className="thumbnail"
+              />
+              <p>{discogsData.artist} - {discogsData.title}</p>
+              <p>Genres: {discogsData.genres?.join(', ')}</p>
+              <p>Année: {discogsData.year}</p>
+              <button onClick={addVinyl}>Ajouter à ma collection</button>
+            </div>
+          )}
+          
+          {error && <p style={{ color: 'red' }}>{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
