@@ -8,6 +8,8 @@ const CognitoRedirectButton = () => {
     const redirectUri = 'https://my-vinyls.vercel.app/api/auth/callback/cognito'; // Your callback URL
     const scope = 'openid profile email'; // Scopes to request
 
+    console.log('Client ID:', clientId); // Debugging line
+
     const signInUrl = `https://${cognitoDomain}/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
 
     window.location.href = signInUrl; // Redirect to Cognito
