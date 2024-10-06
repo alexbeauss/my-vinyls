@@ -3,9 +3,7 @@ import { useSession } from 'next-auth/react';
 import Quagga from 'quagga';
 import axios, { AxiosError } from 'axios';
 import LoginButton from '../components/LoginButton';
-import Image from 'next/image';  // Import Image component
 
-// Define the interfaces
 interface Vinyl {
   id: string;
   artist?: string;
@@ -24,18 +22,10 @@ interface DiscogsData {
   url?: string;
   genres?: string[];
   artist?: string;
-  tracklist?: string[];
-  notes?: string;
-  country?: string;
-  label?: string;
-}
-
-interface ErrorResponse {
-  error: string;
 }
 
 export default function Home() {
-  const { data: session } = useSession();  // Removed unused `status`
+  const { data: session } = useSession();
   const [vinylCollection, setVinylCollection] = useState<Vinyl[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
@@ -44,37 +34,30 @@ export default function Home() {
 
   const startScanner = () => {
     if (!session) {
-      setError("Vous devez être connecté pour scanner.");
+      setError("Vous devez être connecté pour ajouter un disque.");
       return;
     }
+
     setScanning(true);
     setError(null);
-  };
 
-  useEffect(() => {
-    if (scanning) {
-      const interactiveElement = document.getElementById('interactive');
-      if (!interactiveElement) {
-        setError("Le conteneur de scanner n'est pas disponible.");
-        setScanning(false);
-        return;
-      }
-
+    const interactiveElement = document.getElementById('interactive');
+    if (interactiveElement) {
       Quagga.init({
         inputStream: {
-          name: "Live",
-          type: "LiveStream",
+          name: 'Live',
+          type: 'LiveStream',
           target: interactiveElement,
           constraints: {
-            facingMode: "environment",
+            facingMode: 'environment',
           },
         },
         decoder: {
-          readers: ["ean_reader"],
+          readers: ['ean_reader'],
         },
       }, function (err) {
         if (err) {
-          console.error("Erreur lors de l'initialisation de Quagga:", err);
+          console.error('Erreur lors de l\'initialisation de Quagga:', err);
           setError("Erreur lors de l'initialisation du scanner.");
           setScanning(false);
           return;
@@ -91,13 +74,7 @@ export default function Home() {
         }
       });
     }
-
-    return () => {
-      if (scanning) {
-        Quagga.stop();
-      }
-    };
-  }, [scanning, fetchDiscogsData]);  // Added `fetchDiscogsData` dependency
+  };
 
   const fetchDiscogsData = async (barcode: string) => {
     const token = process.env.NEXT_PUBLIC_DISCOGS_API_TOKEN;
@@ -110,6 +87,7 @@ export default function Home() {
       if (response.data.results.length > 0) {
         const vinylInfo = response.data.results[0];
 
+        // Initial setting of basic vinyl information
         setDiscogsData({
           id: vinylInfo.id,
           year: vinylInfo.year,
@@ -117,15 +95,18 @@ export default function Home() {
           url: vinylInfo.uri,
         });
 
+        // Second request to get more details using vinyl ID
         const releaseResponse = await axios.get(
           `https://api.discogs.com/releases/${vinylInfo.id}?token=${token}`
         );
         const releaseData = releaseResponse.data;
 
+        // Prepare artist names (handle case where there are multiple artists)
         const artistNames = releaseData.artists
           ? releaseData.artists.map((artist: { name: string }) => artist.name).join(', ')
           : '';
 
+        // Update DiscogsData with additional information
         setDiscogsData((prevData) => ({
           ...(prevData || {}),
           artist: artistNames,
@@ -159,50 +140,71 @@ export default function Home() {
         userId: session.userId,
       });
 
-      const vinyls = await axios.get('/api/vinyls');
-      setVinylCollection(vinyls.data);
+      fetchVinyls(); // Refresh the vinyl collection after adding
       setScannedData(null);
       setDiscogsData(null);
-
     } catch (err) {
       const axiosError = err as AxiosError;
-      if (axiosError.response) {
-        const errorData = axiosError.response.data as ErrorResponse;
-        setError(errorData.error);
-      } else {
-        setError('Erreur lors de l\'ajout du vinyle.');
-      }
+      setError('Erreur lors de l\'ajout du vinyle.');
+      console.error('Erreur lors de l\'ajout du vinyle:', axiosError);
     }
   };
 
-  return (
-    <div>
-      {!session ? (
-        <LoginButton />
-      ) : (
-        <div>
-          <div id="interactive" className="viewport" />
+  const fetchVinyls = async () => {
+    try {
+      const response = await axios.get('/api/vinyls');
+      setVinylCollection(response.data);
+    } catch (err) {
+      const axiosError = err as AxiosError;
+      console.error('Erreur lors de la récupération des vinyles:', axiosError);
+    }
+  };
 
-          {scannedData && discogsData && (
-            <div>
-              <h2>Vinyl Scanné:</h2>
-              <Image 
-                src={discogsData.thumbnail || ''} 
-                alt="thumbnail" 
-                width={150} 
-                height={150} 
-                className="thumbnail"
-              />
-              <p>{discogsData.artist} - {discogsData.title}</p>
-              <p>Genres: {discogsData.genres?.join(', ')}</p>
-              <p>Année: {discogsData.year}</p>
-              <button onClick={addVinyl}>Ajouter à ma collection</button>
-            </div>
-          )}
-          
-          {error && <p style={{ color: 'red' }}>{error}</p>}
-        </div>
+  useEffect(() => {
+    if (session) {
+      fetchVinyls();
+    }
+  }, [session]);
+
+  return (
+    <div className="container">
+      <h1>Gestionnaire de Collection de Vinyles</h1>
+      <LoginButton />
+
+      <button onClick={startScanner} disabled={scanning} className="button">
+        {scanning ? 'Scan en cours...' : 'Ajouter un disque'}
+      </button>
+
+      {scanning && <div id="interactive" className="scanner"></div>}
+      
+      {scannedData && discogsData && (
+        <>
+          <h2>Informations du vinyle scanné</h2>
+          <p><strong>Titre :</strong> {discogsData.title}</p>
+          <p><strong>Année :</strong> {discogsData.year}</p>
+          <img src={discogsData.thumbnail} alt="thumbnail" className="thumbnail" />
+          <button onClick={addVinyl} className="button">Ajouter à la collection</button>
+        </>
       )}
+
+      {error && <p className="error">{error}</p>}
+
+      <h2>Ma Collection de Vinyles</h2>
+      <div className="vinyl-collection-grid">
+        {vinylCollection.map((vinyl) => (
+          <div key={vinyl.id} className="vinyl-item">
+            <a href={vinyl.url} target="_blank" rel="noopener noreferrer">
+              <img src={vinyl.thumbnail} alt={vinyl.title} className="vinyl-thumbnail" />
+            </a>
+            <div>
+              <p><strong>{vinyl.artist}</strong></p>
+              <p>{vinyl.title}</p>
+              <p>({vinyl.year})</p>
+              <p>{vinyl.genres?.join(', ')}</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
