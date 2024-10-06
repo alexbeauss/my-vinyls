@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import Quagga from 'quagga';
 import axios, { AxiosError } from 'axios';
-import LoginButton from '../components/LoginButton';
+import { signOut, useSession } from 'next-auth/react';
+import GoogleSignInButton from '@/components/GoogleSignInButton';
 
 interface Vinyl {
   id: string;
@@ -169,14 +169,26 @@ export default function Home() {
   return (
     <div className="container">
       <h1>Gestionnaire de Collection de Vinyles</h1>
-      <LoginButton />
+      <div>
+      {!session ? (
+         <GoogleSignInButton />
+      ) : (
+        <>
+          <p>Signed in as {session.userId}</p>
+          <button onClick={() => signOut()}>Sign out</button>
+        </>
+      )}
+    </div>
 
-      <button onClick={startScanner} disabled={scanning} className="button">
-        {scanning ? 'Scan en cours...' : 'Ajouter un disque'}
-      </button>
+      {/* Conditionally render "Ajouter un disque" button when logged in */}
+      {session && (
+        <button onClick={startScanner} disabled={scanning} className="button">
+          {scanning ? 'Scan en cours...' : 'Ajouter un disque'}
+        </button>
+      )}
 
       {scanning && <div id="interactive" className="scanner"></div>}
-      
+
       {scannedData && discogsData && (
         <>
           <h2>Informations du vinyle scanné</h2>

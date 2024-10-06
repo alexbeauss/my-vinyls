@@ -1,55 +1,53 @@
 import NextAuth, { NextAuthOptions, User as NextAuthUser, Account as NextAuthAccount } from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { PrismaClient } from '@prisma/client';
-import { JWT } from 'next-auth/jwt'; // Import the JWT type from next-auth
-import { Session } from 'next-auth'; // Import the Session type
+import CognitoProvider from 'next-auth/providers/cognito';
+import { Session } from 'next-auth';
+import { JWT } from 'next-auth/jwt';
 
-// Initialize Prisma Client
-const prisma = new PrismaClient();
-
-// Extend the Session type to include userId and token
+// Extend the Session and JWT types to include custom fields
 declare module 'next-auth' {
   interface Session {
-    userId: string; // Add the userId field to the session
-    token: string; // Add token field to be a string
+    userId: string;
+    token: string;
   }
 }
 
 declare module 'next-auth/jwt' {
   interface JWT {
-    userId: string; // Ensure userId is available in the JWT
-    accessToken: string; // Add accessToken to the JWT type
+    userId: string;
+    accessToken: string;
   }
 }
 
-
-
-// Define the authOptions object with explicit type
+// Define the authOptions object with AWS Cognito
 export const authOptions: NextAuthOptions = {
   debug: true, // Enable debug logs
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    CognitoProvider({
+      clientId: process.env.COGNITO_CLIENT_ID || '', // Cognito Client ID
+      clientSecret: process.env.COGNITO_CLIENT_SECRET || '', // Cognito Client Secret
+      issuer: process.env.COGNITO_ISSUER || '', // Cognito User Pool Domain
+      authorization: {
+        params: {
+          scope: "openid profile email", // Scope to request from Cognito
+        },
+      },
     }),
   ],
-  adapter: PrismaAdapter(prisma), // Use Prisma to store users
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET, // Secret for signing tokens
   cookies: {
     sessionToken: {
       name: `next-auth.session-token`,
       options: {
         httpsOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax', // Adjust based on your domain setup
+        sameSite: 'lax',
         path: '/',
       },
     },
   },
   session: {
-    strategy: 'jwt', // Using JWT strategy
-    maxAge: 30 * 24 * 60 * 60, // Session will expire after 30 days
+    strategy: 'jwt', // Use JWT strategy for session
+    maxAge: 30 * 24 * 60 * 60, // Session expires after 30 days
   },
   callbacks: {
     async jwt({
@@ -58,23 +56,18 @@ export const authOptions: NextAuthOptions = {
       account,
     }: {
       token: JWT;
-      user?: NextAuthUser; // Use only NextAuthUser
-      account?: NextAuthAccount | null; // Change to Account | null
+      user?: NextAuthUser;
+      account?: NextAuthAccount | null;
     }) {
-      // Persist user information in the JWT token on sign-in
       if (user && account) {
-        token.userId = user.id; // Attach user ID to the JWT token
-        token.accessToken = account.access_token || ''; // Attach access token to the JWT
+        token.userId = user.id; // Add userId to JWT token
+        token.accessToken = account.access_token || ''; // Add access token to JWT
       }
       return token;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
-      // Attach userId from the token to the session
-      session.userId = token.userId;
-
-      // Ensure that the token in the session is a string, not the whole JWT object
-      session.token = token.accessToken || ''; // Default to an empty string if accessToken is undefined
-
+      session.userId = token.userId; // Add userId to session
+      session.token = token.accessToken || ''; // Add access token to session
       return session;
     },
   },
