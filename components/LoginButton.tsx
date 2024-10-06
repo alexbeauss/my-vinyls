@@ -15,7 +15,7 @@ export default function LoginButton() {
     return (
       <div>
         <p>Vous n&apos;êtes pas connecté.</p> {/* Escaped apostrophe */}
-        <button onClick={() => signIn('google')}>Se connecter avec Google</button>
+        <button onClick={() => signIn('google')} className="button">Se connecter avec Google</button>
       </div>
     );
   }

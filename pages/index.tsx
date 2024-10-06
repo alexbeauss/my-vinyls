@@ -1,71 +1,66 @@
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import Quagga from 'quagga';
-import axios, { AxiosError } from 'axios'; // Import AxiosError for proper type handling
+import axios, { AxiosError } from 'axios';
 import LoginButton from '../components/LoginButton';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from './api/auth/[...nextauth]';
-import { GetServerSidePropsContext } from 'next';
-import { Session } from 'next-auth';
+import { int } from 'aws-sdk/clients/datapipeline';
 
 // Define the interfaces
-interface UserWithId {
+interface User {
   name?: string | null;
   email?: string | null;
   image?: string | null;
-  id: string; // Add the 'id' field here
-}
-
-interface SessionWithId extends Session {
-  user: UserWithId;
-  token: string; // Add token field
+  id: string;
 }
 
 interface Vinyl {
   id: string;
+  artist?: string;
   title: string;
   year: string;
+  genres?: string[];
   thumbnail: string;
+  url?: string;
 }
 
 interface DiscogsData {
-  title: string;
-  year: string;
-  thumbnail: string;
+  id?: number;
+  title?: string;
+  year?: string;
+  thumbnail?: string;
+  url?: string;
+  genres?: string[];
+  artist?: string;
+  tracklist?: string[];
+  notes?: string;
+  country?: string;
+  label?: string;
 }
 
-// Define an interface for the error response from the server
 interface ErrorResponse {
   error: string;
 }
 
-// Fetch session on the server side using getServerSideProps
-export async function getServerSideProps(context: GetServerSidePropsContext) {
-  const session = await getServerSession(context.req, context.res, authOptions);
-  console.log('Server-side session:', session); // For debugging purposes
-
-  return {
-    props: {
-      session,
-    },
-  };
-}
-
-export default function Home({ session }: { session: SessionWithId | null }) {
+export default function Home() {
+  const { data: session, status } = useSession();
   const [vinylCollection, setVinylCollection] = useState<Vinyl[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [discogsData, setDiscogsData] = useState<DiscogsData | null>(null);
-  const [error, setError] = useState<string | null>(null); // Specify that error can be a string or null
+  const [error, setError] = useState<string | null>(null);
 
-  console.log('Session:', session); // For debugging purposes
+  console.log('Session in Home:', session);
 
-  // Function to start the scanner
   const startScanner = () => {
+    if (!session) {
+      setError("Vous devez être connecté pour scanner.");
+      return;
+    }
+    
     setScanning(true);
     setError(null);
   };
 
-  // Use useEffect to initialize Quagga once scanning is activated
   useEffect(() => {
     if (scanning) {
       const interactiveElement = document.getElementById('interactive');
@@ -81,11 +76,11 @@ export default function Home({ session }: { session: SessionWithId | null }) {
           type: "LiveStream",
           target: interactiveElement,
           constraints: {
-            facingMode: "environment", // Use the rear camera
+            facingMode: "environment",
           },
         },
         decoder: {
-          readers: ["ean_reader"], // EAN-13 barcode scanner
+          readers: ["ean_reader"],
         },
       }, function (err) {
         if (err) {
@@ -100,14 +95,13 @@ export default function Home({ session }: { session: SessionWithId | null }) {
       Quagga.onDetected((data) => {
         if (data && data.codeResult && data.codeResult.code) {
           setScannedData(data.codeResult.code);
-          fetchDiscogsData(data.codeResult.code); // Fetch Discogs data
+          fetchDiscogsData(data.codeResult.code);
           Quagga.stop();
           setScanning(false);
         }
       });
     }
 
-    // Clean up when the component unmounts
     return () => {
       if (scanning) {
         Quagga.stop();
@@ -115,147 +109,160 @@ export default function Home({ session }: { session: SessionWithId | null }) {
     };
   }, [scanning]);
 
-  // Function to fetch Discogs data via their API
   const fetchDiscogsData = async (barcode: string) => {
     const token = process.env.NEXT_PUBLIC_DISCOGS_API_TOKEN;
+  
     try {
-      const response = await axios.get(`https://api.discogs.com/database/search?barcode=${barcode}&token=${token}`);
+      const response = await axios.get(
+        `https://api.discogs.com/database/search?barcode=${barcode}&token=${token}`
+      );
+  
       if (response.data.results.length > 0) {
         const vinylInfo = response.data.results[0];
+  
+        // Initial setting of basic vinyl information
         setDiscogsData({
-          title: vinylInfo.title,
+          id: vinylInfo.id,
           year: vinylInfo.year,
           thumbnail: vinylInfo.thumb,
+          url: vinylInfo.uri,
         });
+  
+        // Second request to get more details using vinyl ID
+        const releaseResponse = await axios.get(
+          `https://api.discogs.com/releases/${vinylInfo.id}?token=${token}`
+        );
+        const releaseData = releaseResponse.data;
+  
+        // Prepare artist names (handle case where there are multiple artists)
+        const artistNames = releaseData.artists
+          ? releaseData.artists.map((artist: { name: string }) => artist.name).join(', ')
+          : '';
+  
+        // Update DiscogsData with additional information
+        setDiscogsData((prevData) => ({
+          ...(prevData || {}),
+          artist: artistNames, // Artist names as a comma-separated string
+          title: releaseData.title,
+          genres: releaseData.genres || [], // Genres array
+          tracklist: releaseData.tracklist?.map((track: { title: string }) => track.title) || [], // Tracklist titles
+        }));
+        console.log('Vinyl:', discogsData);
       } else {
-        setError("Aucun résultat trouvé pour ce code-barres.");
+        setError('Aucun résultat trouvé pour ce code-barres.');
         setDiscogsData(null);
       }
     } catch (err) {
-      const axiosError = err as AxiosError; // Rename to avoid conflict
-      setError("Erreur lors de la récupération des données Discogs.");
+      const axiosError = err as AxiosError;
+      setError('Erreur lors de la récupération des données Discogs.');
       console.error(axiosError);
     }
   };
 
-  // Function to add vinyl to the collection
   const addVinyl = async () => {
-    if (!discogsData) return;
+    if (!discogsData || !session?.user) return;
 
     try {
       const newVinyl = await axios.post('/api/vinyls/add', {
-        barcode: scannedData,
+        id: discogsData.id,
+        artist: discogsData.artist,
         title: discogsData.title,
+        genres: discogsData.genres,
         year: discogsData.year,
         thumbnail: discogsData.thumbnail,
-        userId: session?.user?.id, // Use session from props
-      },
-      {
+        url: discogsData.url,
+        userId: session.userId,
+      }, {
         headers: {
-          Authorization: `Bearer ${session?.token}`, // Pass the session token if available
+          Authorization: `Bearer ${session?.token}`, // Assuming the token is stored in session
         },
-        withCredentials: true, // Send cookies if necessary
+        withCredentials: true,
       });
 
-      console.log("Vinyl ajouté : ", newVinyl.data);
-
-      // Fetch the updated vinyl collection
       const vinyls = await axios.get('/api/vinyls');
       setVinylCollection(vinyls.data);
-
-      // Reset the scanned data and discogs data after adding the vinyl
       setScannedData(null);
       setDiscogsData(null);
 
     } catch (err) {
-      const axiosError = err as AxiosError; // Rename to avoid conflict
-      // Check for specific error response
+      const axiosError = err as AxiosError;
       if (axiosError.response) {
-        const errorData = axiosError.response.data as ErrorResponse; // Cast to your error response interface
+        const errorData = axiosError.response.data as ErrorResponse;
         if (axiosError.response.status === 409) {
-          setError(errorData.error); // Display error message from the server
+          setError(errorData.error);
         } else {
-          setError("Erreur lors de l'ajout du vinyle."); // General error message
+          setError("Erreur lors de l'ajout du vinyle.");
         }
       } else {
-        setError("Erreur lors de l'ajout du vinyle."); // Handle case where response is undefined
+        setError("Erreur lors de l'ajout du vinyle.");
       }
       console.error('Erreur lors de l\'ajout du vinyle:', axiosError);
     }
   };
 
-  // Function to fetch the user's vinyl collection
   const fetchVinyls = async () => {
     try {
       const response = await axios.get('/api/vinyls');
       setVinylCollection(response.data);
     } catch (err) {
-      const axiosError = err as AxiosError; // Rename to avoid conflict
+      const axiosError = err as AxiosError;
       console.error('Erreur lors de la récupération des vinyles:', axiosError);
     }
   };
 
-  // Fetch the vinyl collection when the session is available
   useEffect(() => {
     if (session) {
       fetchVinyls();
     }
   }, [session]);
 
-  // If the user is not authenticated, prompt them to log in
   if (!session) {
     return (
-      <div>
+      <div className="container">
         <h1>Gestionnaire de Collection de Vinyles</h1>
         <p>Vous devez être connecté pour voir vos vinyles</p>
-        <LoginButton /> {/* Button to handle login */}
+        <LoginButton />
       </div>
     );
   }
-
-  // Render the rest of the app when the user is authenticated
+  
   return (
-    <div style={{ padding: "20px" }}>
+    <div className="container">
       <h1>Gestionnaire de Collection de Vinyles</h1>
-      
       <LoginButton />
 
-      {/* Scanner status message */}
-      <div id="scanner-container" style={{ width: '100%', height: '50px', marginBottom: '20px', backgroundColor: '#f0f0f0' }}>
-        {scanning ? <p>Scanning en cours...</p> : <p>Appuyez pour scanner un code-barres</p>}
-      </div>
-
-      {/* Scanner zone only appears when "scanning" is true */}
       {scanning && (
-        <div id="interactive" style={{ width: '300px', height: '200px', position: 'relative', backgroundColor: '#000' }}></div>
+        <div id="interactive" className="scanner"></div>
       )}
 
-      {/* Button to start the scanner */}
-      <button onClick={startScanner} disabled={scanning} style={{ marginBottom: '20px' }}>
+      <button onClick={startScanner} disabled={scanning} className="button">
         {scanning ? 'Scan en cours...' : 'Démarrer le scanner'}
       </button>
 
-      {/* Display scanned vinyl information */}
       {scannedData && discogsData && (
         <>
           <h2>Informations du vinyle scanné</h2>
           <p><strong>Titre :</strong> {discogsData.title}</p>
           <p><strong>Année :</strong> {discogsData.year}</p>
-          <img src={discogsData.thumbnail} alt="thumbnail" />
-          <button onClick={addVinyl}>Ajouter à la collection</button>
+          <img src={discogsData.thumbnail} alt="thumbnail" className="thumbnail" />
+          <button onClick={addVinyl} className="button">Ajouter à la collection</button>
         </>
       )}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="error">{error}</p>}
 
-      {/* Display the user's vinyl collection */}
       <h2>Ma Collection de Vinyles</h2>
       <div className="vinyl-collection-grid">
         {vinylCollection.map((vinyl) => (
           <div key={vinyl.id} className="vinyl-item">
-            <img src={vinyl.thumbnail} alt={vinyl.title} width={100} />
+            <a href={vinyl.url} target="_blank" rel="noopener noreferrer">
+              <img src={vinyl.thumbnail} alt={vinyl.title} className="vinyl-thumbnail" />
+            </a>
             <div>
-              <strong>{vinyl.title}</strong> - ({vinyl.year})
+              <p><strong>{vinyl.artist}</strong></p>
+              <p>{vinyl.title}</p>
+              <p>({vinyl.year})</p>
+              <p>{vinyl.genres}</p>
             </div>
           </div>
         ))}

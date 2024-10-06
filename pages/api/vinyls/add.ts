@@ -1,13 +1,22 @@
-import { PrismaClient } from '@prisma/client';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../auth/[...nextauth]'; // Adjust path if necessary
-import { NextApiRequest, NextApiResponse } from 'next'; // Import types for API request and response
+import { authOptions } from '../auth/[...nextauth]';
+import { NextApiRequest, NextApiResponse } from 'next';
 
-const prisma = new PrismaClient();
+// Initialize the DynamoDB client and DocumentClient
+const client = new DynamoDBClient({
+  region: 'eu-west-3',  // Replace with your AWS region
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
+const dynamoDb = DynamoDBDocumentClient.from(client);
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) { // Explicitly type req and res
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
-    const { barcode, title, year, thumbnail } = req.body;
+    const { id, artist, title, year, genres, thumbnail, url } = req.body;
 
     // Get server-side session using getServerSession
     const session = await getServerSession(req, res, authOptions);
@@ -18,32 +27,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-      // Check if the vinyl already exists in the user's collection
-      const existingVinyl = await prisma.vinyl.findFirst({
-        where: {
-          barcode: barcode,
-          userId: session.userId, // Check for the logged-in user's collection
-        },
-      });
+      const userId = session.userId; // Get the user ID from the session
 
-      if (existingVinyl) {
+      // Check if the vinyl already exists in the user's collection
+      const paramsCheck = {
+        TableName: 'VinylCollection',  // DynamoDB table name
+        KeyConditionExpression: 'id = :id', // Assuming id is the partition key
+        FilterExpression: 'userId = :userId', // Use a filter if userId is not part of the key schema
+        ExpressionAttributeValues: {
+            ':id': id,
+            ':userId': userId,
+        },
+      };
+
+      const existingVinyl = await dynamoDb.send(new QueryCommand(paramsCheck));
+
+      if (existingVinyl.Items && existingVinyl.Items.length > 0) {
         return res.status(409).json({ error: 'Ce vinyle existe déjà dans votre collection.' });
       }
 
-      // Add the vinyl for the logged-in user
-      const newVinyl = await prisma.vinyl.create({
-        data: {
-          barcode,
-          title,
-          year: parseInt(year),
-          thumbnail,
-          userId: session.userId, // Attach the vinyl to the user
+      // Add the new vinyl to the user's collection
+      const paramsInsert = {
+        TableName: 'VinylCollection',
+        Item: {
+          userId: userId,
+          id: id,
+          artist: artist,
+          title: title,
+          genres: genres,
+          year: parseInt(year),  // Ensure year is parsed as an integer
+          thumbnail: thumbnail,
+          url: url,
         },
-      });
-      
-      res.status(200).json(newVinyl);
+      };
+
+      await dynamoDb.send(new PutCommand(paramsInsert));
+
+      res.status(200).json({ message: 'Vinyle ajouté avec succès' });
     } catch (error) {
-      console.error(error);
+      console.error('Erreur lors de l\'ajout du vinyle:', error);
       res.status(500).json({ error: "Erreur lors de l'ajout du vinyle." });
     }
   } else {
