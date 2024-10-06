@@ -3,6 +3,7 @@ import Quagga from 'quagga';
 import axios, { AxiosError } from 'axios';
 import { signOut, useSession } from 'next-auth/react';
 import GoogleSignInButton from '@/components/GoogleSignInButton';
+import CognitoRedirectButton from '@/components/CognitoRedirectButton';
 
 interface Vinyl {
   id: string;
@@ -169,6 +170,7 @@ export default function Home() {
   return (
     <div className="container">
       <h1>Gestionnaire de Collection de Vinyles</h1>
+      <CognitoRedirectButton />
       <div>
       {!session ? (
          <GoogleSignInButton />
