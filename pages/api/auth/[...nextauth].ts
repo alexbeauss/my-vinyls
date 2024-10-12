@@ -1,5 +1,5 @@
 import NextAuth, { NextAuthOptions, User as NextAuthUser, Account as NextAuthAccount } from 'next-auth';
-import CognitoProvider from 'next-auth/providers/cognito';
+import Auth0Provider from 'next-auth/providers/auth0';
 import { Session } from 'next-auth';
 import { JWT } from 'next-auth/jwt';
 
@@ -18,17 +18,17 @@ declare module 'next-auth/jwt' {
   }
 }
 
-// Define the authOptions object with AWS Cognito
+// Define the authOptions object with Auth0
 export const authOptions: NextAuthOptions = {
   debug: true, // Enable debug logs
   providers: [
-    CognitoProvider({
-      clientId: process.env.COGNITO_CLIENT_ID || '', // Cognito Client ID
-      clientSecret: process.env.COGNITO_CLIENT_SECRET || '', // Cognito Client Secret
-      issuer: process.env.COGNITO_ISSUER || '', // Cognito User Pool Domain
+    Auth0Provider({
+      clientId: process.env.AUTH0_CLIENT_ID || '', // Auth0 Client ID
+      clientSecret: process.env.AUTH0_CLIENT_SECRET || '', // Auth0 Client Secret
+      issuer: process.env.AUTH0_ISSUER || '', // Auth0 Issuer URL
       authorization: {
         params: {
-          scope: "openid profile email", // Scope to request from Cognito
+          scope: "openid profile email", // Scope to request from Auth0
         },
       },
     }),

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import Quagga from 'quagga';
 import axios, { AxiosError } from 'axios';
 import { signOut, useSession } from 'next-auth/react';
-import GoogleSignInButton from '@/components/GoogleSignInButton';
-import CognitoRedirectButton from '@/components/CognitoRedirectButton';
+import Auth0SignInButton from '@/components/Auth0SignInButton';
 
 interface Vinyl {
   id: string;
@@ -170,10 +169,9 @@ export default function Home() {
   return (
     <div className="container">
       <h1>Gestionnaire de Collection de Vinyles</h1>
-      <CognitoRedirectButton />
       <div>
       {!session ? (
-         <GoogleSignInButton />
+         <Auth0SignInButton />
       ) : (
         <>
           <p>Signed in as {session.userId}</p>
