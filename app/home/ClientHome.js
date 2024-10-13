@@ -1,8 +1,9 @@
 "use client";
 import { useUser } from '@auth0/nextjs-auth0/client';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 
-const Scanner = dynamic(() => import('../components/Scanner'), { ssr: false });
+const Scanner = dynamic(() => import('../components/scanner'), { ssr: false });
 
 export default function ClientHome() {
   const { user, error, isLoading } = useUser();
@@ -13,9 +14,11 @@ export default function ClientHome() {
 
   return (
     <div>
-      <h1>Bienvenue sur la page d'accueil, {user.name} !</h1>
+      <h1>Bienvenue sur la page d&apos;accueil, {user.name} !</h1>
       <Scanner />
-      <a href="/api/auth/logout">Déconnexion</a>
+      <Link href="/api/auth/logout">
+        Déconnexion
+</Link>
     </div>
   );
 }

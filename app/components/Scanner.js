@@ -1,63 +1,59 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import Quagga from '@ericblade/quagga2';
 
 export default function Scanner() {
+  const [Quagga, setQuagga] = useState(null);
   const scannerRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [isBrowserReady, setIsBrowserReady] = useState(false);
 
   useEffect(() => {
-    setIsBrowserReady(true);
+    import("@ericblade/quagga2").then((quaggaModule) => {
+      setQuagga(quaggaModule.default);
+    });
   }, []);
 
   useEffect(() => {
-    if (isScanning && scannerRef.current) {
-      const initQuagga = async () => {
-        try {
-          await Quagga.init({
-            inputStream: {
-              name: "Live",
-              type: "LiveStream",
-              target: scannerRef.current,
-              constraints: {
-                width: 640,
-                height: 480,
-                facingMode: "environment"
-              },
+    if (isScanning && Quagga && scannerRef.current) {
+      Quagga.init(
+        {
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: scannerRef.current,
+            constraints: {
+              width: 640,
+              height: 480,
+              facingMode: "environment"
             },
-            decoder: {
-              readers: ["ean_reader"]
-            }
-          });
-          
+          },
+          decoder: {
+            readers: ["ean_reader"]
+          }
+        },
+        (err) => {
+          if (err) {
+            console.error(err);
+            return;
+          }
           console.log("Quagga initialization finished. Ready to start");
           Quagga.start();
-
-          Quagga.onDetected((result) => {
-            console.log("Code-barres détecté:", result.codeResult.code);
-            // Ajoutez ici la logique pour traiter le code-barres détecté
-          });
-        } catch (err) {
-          console.error("Erreur d'initialisation de Quagga:", err);
         }
-      };
+      );
 
-      initQuagga();
+      Quagga.onDetected((result) => {
+        console.log("Code-barres détecté:", result.codeResult.code);
+        // Ajoutez ici la logique pour traiter le code-barres détecté
+      });
 
       return () => {
         Quagga.stop();
       };
     }
-  }, [isScanning]);
+  }, [isScanning, Quagga]);
 
   const lancerScannerCodeBarres = () => {
     setIsScanning(true);
   };
-
-  if (!isBrowserReady) {
-    return null; // ou un placeholder si vous préférez
-  }
 
   return (
     <div>
