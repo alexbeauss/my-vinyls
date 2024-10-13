@@ -1,13 +1,11 @@
 "use client";
 import { useUser } from '@auth0/nextjs-auth0/client';
-import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 const Scanner = dynamic(() => import('../components/Scanner'), { ssr: false });
 
 export default function ClientHome() {
   const { user, error, isLoading } = useUser();
-  const router = useRouter();
 
   
   if (isLoading) return <div>Chargement...</div>;
