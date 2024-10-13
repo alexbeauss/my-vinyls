@@ -3,7 +3,7 @@ import { useUser } from '@auth0/nextjs-auth0/client';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-const Scanner = dynamic(() => import('../components/scanner'), { ssr: false });
+const Scanner = dynamic(() => import('../components/Scanner'), { ssr: false });
 
 export default function ClientHome() {
   const { user, error, isLoading } = useUser();
