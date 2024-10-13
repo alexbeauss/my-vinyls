@@ -1,24 +1,25 @@
 "use client";
 import { useUser } from '@auth0/nextjs-auth0/client';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 
 const Scanner = dynamic(() => import('../components/Scanner'), { ssr: false });
 
 export default function ClientHome() {
   const { user, error, isLoading } = useUser();
+  const router = useRouter();
 
+  
   if (isLoading) return <div>Chargement...</div>;
   if (error) return <div>{error.message}</div>;
-  if (!user) return null; // L'utilisateur sera redirigé côté serveur si non authentifié
+  if (!user) return <div>Non autorisé</div>;
 
   return (
     <div>
       <h1>Bienvenue sur la page d&apos;accueil, {user.name} !</h1>
+      <p>Email : {user.email}</p>
+      <a href="/api/auth/logout">Déconnexion</a>
       <Scanner />
-      <Link href="/api/auth/logout">
-        Déconnexion
-</Link>
     </div>
   );
 }
