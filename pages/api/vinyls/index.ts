@@ -1,25 +1,25 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../auth/[...nextauth]';
+import { getSession, withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { NextApiRequest, NextApiResponse } from 'next'; // Import types for API request and response
 
 // Create the DynamoDB client
 const client = new DynamoDBClient({ region: 'eu-west-3' }); // Change region if needed
 const dynamoDb = DynamoDBDocumentClient.from(client); // High-level Document client
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getServerSession(req, res, authOptions);
-  console.log('Session in API:', session);
-
-  if (!session) {
-    return res.status(401).json({ error: 'Non autorisé. Vous devez être connecté pour voir vos vinyles.' });
-  }
-
+export default withApiAuthRequired(async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const userId = session.userId; // Get user ID from session
+    // Retrieve session data using Auth0's session management
+    const { user } = await getSession(req, res);
+    console.log('User session from Auth0:', user);
 
-    // Use ScanCommand to filter by userId while the partition key is 'id'
+    if (!user) {
+      return res.status(401).json({ error: 'Non autorisé. Vous devez être connecté pour voir vos vinyles.' });
+    }
+
+    const userId = user.sub; // Auth0 user ID (usually stored in the 'sub' field)
+
+    // Use ScanCommand to filter by userId (partition key is assumed to be 'userId')
     const params = {
       TableName: 'VinylCollection', // Replace with your DynamoDB table name
       FilterExpression: 'userId = :userId',
@@ -37,4 +37,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Erreur lors de la récupération des vinyles:', error);
     res.status(500).json({ error: 'Erreur lors de la récupération des vinyles.' });
   }
-}
+});
