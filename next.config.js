@@ -15,6 +15,9 @@ const nextConfig = {
       },
     ];
   },
+  images: {
+    domains: ['lh3.googleusercontent.com','i.discogs.com'],
+  },
 };
 
 module.exports = nextConfig;

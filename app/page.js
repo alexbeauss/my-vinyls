@@ -1,21 +1,18 @@
-// app/page.js
 import { getSession } from '@auth0/nextjs-auth0';
-import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
-export default async function Home() {
+export default async function HomePage() {
   const session = await getSession();
 
-  return (
-    <div>
-      <h1>Bienvenue</h1>
-      {session ? (
-        <div>
-          <p>Connecté en tant que {session.user.name}</p>
-          <Link href="/home">Aller à la page d&apos;accueil</Link>
-        </div>
-      ) : (
-        <Link href="/api/auth/login">Se connecter</Link>
-      )}
-    </div>
-  );
+  if (session && session.user) {
+    // L'utilisateur est connecté, rediriger vers la page d'accueil
+    redirect('/home');
+  } else {
+    // L'utilisateur n'est pas connecté, rediriger vers la page de connexion
+    redirect('/api/auth/login');
+  }
+
+  // Cette partie ne sera jamais atteinte en raison des redirections,
+  // mais Next.js exige un retour pour les composants async
+  return null;
 }
