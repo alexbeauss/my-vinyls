@@ -2,7 +2,7 @@ import { getSession } from '@auth0/nextjs-auth0';
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../lib/awsConfig';
 
-export async function GET(req) {
+export async function GET() {
   const session = await getSession();
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {

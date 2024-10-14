@@ -1,11 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import dynamic from 'next/dynamic';
 
-const Scanner = dynamic(() => import('../components/Scanner'), { ssr: false });
-
-export default function ClientHome({ user }) {
+export default function ClientHome({ }) {
   const [discogsCollection, setDiscogsCollection] = useState(null);
   const [randomAlbum, setRandomAlbum] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
