@@ -1,10 +1,10 @@
 import { getSession } from '@auth0/nextjs-auth0';
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from '../../lib/awsConfig';
+import { docClient } from '../../lib/dynamoDbClient';
 
-export const runtime = 'edge'; // Ajoutez cette ligne
+//export const runtime = 'edge'; // Ajoutez cette ligne
 
-export async function GET(request) {
+export async function GET() {
   const session = await getSession();
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
