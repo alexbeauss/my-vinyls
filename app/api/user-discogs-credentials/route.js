@@ -2,7 +2,9 @@ import { getSession } from '@auth0/nextjs-auth0';
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../lib/awsConfig';
 
-export async function GET() {
+export const runtime = 'edge'; // Ajoutez cette ligne
+
+export async function GET(request) {
   const session = await getSession();
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
@@ -11,7 +13,7 @@ export async function GET() {
     });
   }
 
-  const userId = session.user.sub; // Identifiant unique de l'utilisateur Auth0
+  const userId = session.user.sub;
 
   try {
     const command = new GetCommand({
@@ -44,7 +46,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req) {
+export async function POST(request) {
   const session = await getSession();
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
@@ -53,8 +55,8 @@ export async function POST(req) {
     });
   }
 
-  const userId = session.user.sub; // Identifiant unique de l'utilisateur Auth0
-  const { username, token } = await req.json();
+  const userId = session.user.sub;
+  const { username, token } = await request.json();
 
   try {
     const command = new PutCommand({
