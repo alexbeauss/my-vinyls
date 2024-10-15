@@ -7,11 +7,13 @@ import { useEffect, useState } from 'react';
 import ClientHome from './ClientHome';
 import LogoutButton from '../components/LogoutButton';
 import DynamicProfilePage from '../components/DynamicProfilePage';
+import AlbumDetails from '../components/AlbumDetails'; // Assurez-vous de créer ce composant
 
 export default function DynamicHomePage() {
   const { user, error, isLoading } = useUser();
   const router = useRouter();
   const [showProfile, setShowProfile] = useState(false);
+  const [selectedAlbumId, setSelectedAlbumId] = useState(null);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -22,6 +24,14 @@ export default function DynamicHomePage() {
   if (isLoading) return <div>Chargement...</div>;
   if (error) return <div>Erreur : {error.message}</div>;
   if (!user) return null;
+
+  const handleAlbumClick = (albumId) => {
+    setSelectedAlbumId(albumId);
+  };
+
+  const handleCloseAlbumDetails = () => {
+    setSelectedAlbumId(null);
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -56,8 +66,15 @@ export default function DynamicHomePage() {
               <DynamicProfilePage />
             </div>
           </div>
+        ) : selectedAlbumId ? (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-8 rounded-lg max-w-4xl w-full max-h-screen overflow-auto">
+              <button onClick={handleCloseAlbumDetails} className="float-right text-2xl">&times;</button>
+              <AlbumDetails albumId={selectedAlbumId} />
+            </div>
+          </div>
         ) : (
-          <ClientHome user={user} />
+          <ClientHome user={user} onAlbumClick={handleAlbumClick} />
         )}
       </main>
     </div>

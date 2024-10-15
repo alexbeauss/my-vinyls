@@ -6,7 +6,7 @@ const getTodayDate = () => {
   return new Date().toISOString().split('T')[0];
 };
 
-export default function ClientHome({  }) {
+export default function ClientHome({ onAlbumClick }) {
   const [discogsCollection, setDiscogsCollection] = useState(null);
   const [collectionValue, setCollectionValue] = useState(null);
   const [randomAlbum, setRandomAlbum] = useState(null);
@@ -107,12 +107,14 @@ export default function ClientHome({  }) {
   return (
     <div className="container mx-auto px-4">
       
-      
       {/* Section "À écouter aujourd'hui" */}
       {randomAlbum && (
         <div className="mb-8 p-4 bg-gray-100 rounded-lg shadow-md">
           <h2 className="text-3xl font-bold mb-4">À écouter aujourd&apos;hui</h2>
-          <div className="flex items-center">
+          <div 
+            className="flex items-center cursor-pointer hover:bg-gray-200 transition-colors duration-200 rounded-lg p-2"
+            onClick={() => onAlbumClick(randomAlbum.id)}
+          >
             <div className="w-32 h-32 relative mr-4">
               <Image
                 src={randomAlbum.basic_information.cover_image}
@@ -188,7 +190,11 @@ export default function ClientHome({  }) {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {sortedAndFilteredReleases.map((release) => (
-              <div key={release.id} className="border rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
+              <div 
+                key={release.id} 
+                onClick={() => onAlbumClick(release.id)}
+                className="border rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer"
+              >
                 <div className="relative w-full pb-[100%]">
                   <Image
                     src={release.basic_information.cover_image}

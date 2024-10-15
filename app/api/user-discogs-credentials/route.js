@@ -27,6 +27,7 @@ export async function GET() {
       return new Response(JSON.stringify({
         username: response.Item.discogsUsername,
         token: response.Item.discogsToken,
+        mood: response.Item.mood, // Ajout de l'humeur dans la réponse
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -56,7 +57,7 @@ export async function POST(request) {
   }
 
   const userId = session.user.sub;
-  const { username, token } = await request.json();
+  const { username, token, mood } = await request.json(); // Ajout de mood dans la déstructuration
 
   try {
     const command = new PutCommand({
@@ -65,6 +66,7 @@ export async function POST(request) {
         userId,
         discogsUsername: username,
         discogsToken: token,
+        mood, // Ajout de l'humeur dans l'objet Item
       },
     });
 
