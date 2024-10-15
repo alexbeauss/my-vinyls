@@ -2,14 +2,20 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
-export default function ClientHome({ }) {
+const getTodayDate = () => {
+  return new Date().toISOString().split('T')[0];
+};
+
+export default function ClientHome({  }) {
   const [discogsCollection, setDiscogsCollection] = useState(null);
+  const [collectionValue, setCollectionValue] = useState(null);
   const [randomAlbum, setRandomAlbum] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState('artist'); // 'artist' ou 'year'
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' ou 'desc'
+  const [sortBy, setSortBy] = useState('artist');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [genreFilters, setGenreFilters] = useState([]);
   const itemsPerPage = 100;
 
   useEffect(() => {
@@ -22,9 +28,10 @@ export default function ClientHome({ }) {
         }
         const data = await response.json();
         setDiscogsCollection(data.collection);
+        setCollectionValue(data.collectionValue);
         
-        // Logique pour l'album du jour (inchangée)
-        const today = new Date().toDateString();
+        // Logique pour l'album "à écouter aujourd'hui"
+        const today = getTodayDate();
         const storedAlbum = localStorage.getItem('randomAlbum');
         const storedDate = localStorage.getItem('randomAlbumDate');
 
@@ -62,18 +69,40 @@ export default function ClientHome({ }) {
     }
   };
 
-  const sortedReleases = discogsCollection?.releases.sort((a, b) => {
-    if (sortBy === 'artist') {
-      const artistA = a.basic_information.artists[0].name.toLowerCase();
-      const artistB = b.basic_information.artists[0].name.toLowerCase();
-      return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
-    } else if (sortBy === 'year') {
-      const yearA = a.basic_information.year || 0;
-      const yearB = b.basic_information.year || 0;
-      return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
-    }
-    return 0;
-  });
+  const getUniqueGenres = () => {
+    if (!discogsCollection) return [];
+    const genres = new Set();
+    discogsCollection.releases.forEach(release => {
+      release.basic_information.styles.forEach(style => genres.add(style));
+    });
+    return Array.from(genres).sort();
+  };
+
+  const handleGenreFilterChange = (genre) => {
+    setGenreFilters(prev => 
+      prev.includes(genre) 
+        ? prev.filter(g => g !== genre) 
+        : [...prev, genre]
+    );
+  };
+
+  const sortedAndFilteredReleases = discogsCollection?.releases
+    .filter(release => 
+      genreFilters.length === 0 || 
+      release.basic_information.styles.some(style => genreFilters.includes(style))
+    )
+    .sort((a, b) => {
+      if (sortBy === 'artist') {
+        const artistA = a.basic_information.artists[0].name.toLowerCase();
+        const artistB = b.basic_information.artists[0].name.toLowerCase();
+        return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
+      } else if (sortBy === 'year') {
+        const yearA = a.basic_information.year || 0;
+        const yearB = b.basic_information.year || 0;
+        return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
+      }
+      return 0;
+    });
 
   return (
     <div className="container mx-auto px-4">
@@ -82,7 +111,7 @@ export default function ClientHome({ }) {
       {/* Section "À écouter aujourd'hui" */}
       {randomAlbum && (
         <div className="mb-8 p-4 bg-gray-100 rounded-lg shadow-md">
-          <h2 className="text-xl font-bold mb-4">À écouter aujourd&apos;hui</h2>
+          <h2 className="text-3xl font-bold mb-4">À écouter aujourd&apos;hui</h2>
           <div className="flex items-center">
             <div className="w-32 h-32 relative mr-4">
               <Image
@@ -93,7 +122,6 @@ export default function ClientHome({ }) {
                 className="rounded shadow"
               />
             </div>
-            
             <div>
               <h3 className="font-bold">{randomAlbum.basic_information.title}</h3>
               <p>{randomAlbum.basic_information.artists[0].name}</p>
@@ -103,14 +131,28 @@ export default function ClientHome({ }) {
           </div>
         </div>
       )}
-      <h1 className="text-2xl font-bold mt-8 mb-4">Ma collection</h1>
 
       {isLoading && <p>Chargement de votre collection...</p>}
       {error && <p className="text-red-500">Erreur : {error}</p>}
       {discogsCollection && (
         <div>
+          <h1 className="text-3xl font-bold mt-8 mb-4">Ma collection</h1>
           <div className="flex justify-between items-center mb-4">
-            <p>Nombre total d&apos;éléments : {discogsCollection.pagination.items}</p>
+            <div>
+              <p className="text-3xl font-bold text-blue-800 mt-1">{discogsCollection.pagination.items} disques</p>
+              {collectionValue && (
+                <div className="text-gray-600 mt-1">
+                  <p className="text-xl">
+                    Valeur médiane : <span className="font-bold text-xl">
+                      {collectionValue.median.toLocaleString()} {collectionValue.currency}
+                    </span>
+                  </p>
+                  <p className="text-xs">
+                    Valeur min-max : {collectionValue.minimum.toLocaleString()} - {collectionValue.maximum.toLocaleString()} {collectionValue.currency}
+                  </p>
+                </div>
+              )}
+            </div>
             <div>
               <button 
                 onClick={() => handleSort('artist')} 
@@ -126,8 +168,26 @@ export default function ClientHome({ }) {
               </button>
             </div>
           </div>
+          <div className="flex flex-wrap items-center mb-4">
+            <div className="w-full mb-2">
+              <span className="font-bold">Filtrer par genre :</span>
+            </div>
+            {getUniqueGenres().map(genre => (
+              <div key={genre} className="mr-4 mb-2">
+                <label className="inline-flex items-center">
+                  <input
+                    type="checkbox"
+                    className="form-checkbox h-5 w-5 text-blue-600"
+                    checked={genreFilters.includes(genre)}
+                    onChange={() => handleGenreFilterChange(genre)}
+                  />
+                  <span className="ml-2 text-gray-700">{genre}</span>
+                </label>
+              </div>
+            ))}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {sortedReleases.map((release) => (
+            {sortedAndFilteredReleases.map((release) => (
               <div key={release.id} className="border rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
                 <div className="relative w-full pb-[100%]">
                   <Image
@@ -144,7 +204,7 @@ export default function ClientHome({ }) {
                     Année : {release.basic_information.year || 'N/A'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1 truncate">
-                    Genre : {release.basic_information.genres.join(', ') || 'N/A'}
+                    Genre : {release.basic_information.styles.join(', ') || 'N/A'}
                   </p>
                 </div>
               </div>

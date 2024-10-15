@@ -2,11 +2,12 @@ import { getSession } from '@auth0/nextjs-auth0';
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../lib/awsConfig';
 import Discogs from 'disconnect';
+import axios from 'axios';
 
 export async function GET(req) {
   const session = await getSession();
   if (!session || !session.user) {
-    return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+    return new Response(JSON.stringify({ error: 'Not authentifié' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -26,7 +27,7 @@ export async function GET(req) {
     const response = await docClient.send(getCommand);
     
     if (!response.Item) {
-      return new Response(JSON.stringify({ error: 'Discogs credentials not found' }), {
+      return new Response(JSON.stringify({ error: 'Identifiants Discogs non trouvés' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -40,14 +41,24 @@ export async function GET(req) {
       per_page: per_page
     });
 
-    return new Response(JSON.stringify({ collection }), {
+    // Récupérer la valeur de la collection via un appel API direct
+    const collectionValueResponse = await axios.get(`https://api.discogs.com/users/${discogsUsername}/collection/value`, {
+      headers: {
+        'Authorization': `Discogs token=${discogsToken}`,
+        'User-Agent': 'MyVinylsApp/1.0'
+      }
+    });
+
+    const collectionValue = collectionValueResponse.data;
+
+    return new Response(JSON.stringify({ collection, collectionValue }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Error fetching Discogs data:', error);
-    return new Response(JSON.stringify({ error: 'Failed to fetch Discogs data' }), {
+    console.error('Erreur lors de la récupération des données Discogs:', error);
+    return new Response(JSON.stringify({ error: 'Échec de la récupération des données Discogs' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

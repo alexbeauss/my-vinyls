@@ -27,8 +27,8 @@ export default function DynamicHomePage() {
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-blue-900 p-4">
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-white text-2xl font-bold">
-            My Vinyls
+          <Link href="/" className="font-mono text-white text-2xl font-bold">
+            my vinyls
           </Link>
           <div className="flex items-center">
             <Link href="/search" className="text-white mr-6 hover:text-blue-200">
