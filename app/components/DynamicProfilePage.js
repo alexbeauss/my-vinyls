@@ -60,7 +60,7 @@ export default function DynamicProfilePage() {
       
       <form onSubmit={handleSubmit} className="mt-4">
         <div className="mb-4">
-          <label htmlFor="discogsUsername" className="block mb-2">Nom d&aposutilisateur Discogs</label>
+          <label htmlFor="discogsUsername" className="block mb-2">Utilisateur Discogs</label>
           <input
             type="text"
             id="discogsUsername"
