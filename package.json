@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run clean-install && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean-install": "rm -rf node_modules && npm install"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
@@ -49,11 +50,10 @@
     "crypto": false,
     "stream": false,
     "util": false,
-    "http": false,
-    "https": false,
     "fs": false,
-    "path": false,
-    "net": false,
-    "zlib": false
+    "path": false
+  },
+  "engines": {
+    "node": "14.x"
   }
 }
