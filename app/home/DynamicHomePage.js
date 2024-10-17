@@ -1,13 +1,11 @@
 "use client";
 import { useUser } from '@auth0/nextjs-auth0/client';
-import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import ClientHome from './ClientHome';
-import LogoutButton from '../components/LogoutButton';
 import DynamicProfilePage from '../components/DynamicProfilePage';
-import AlbumDetails from '../components/AlbumDetails'; // Assurez-vous de créer ce composant
+import AlbumDetails from '../components/AlbumDetails';
+import Navbar from '../components/Navbar';
 
 export default function DynamicHomePage() {
   const { user, error, isLoading } = useUser();
@@ -34,29 +32,8 @@ export default function DynamicHomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-blue-900 p-4">
-        <div className="w-full max-w-7xl mx-auto flex justify-between items-center">
-          <Link href="/" className="font-mono text-white text-2xl font-bold">
-            my vinyls
-          </Link>
-          <div className="flex items-center">
-            <Link href="/search" className="text-white mr-6 hover:text-blue-200">
-              Rechercher
-            </Link>
-            <button onClick={() => setShowProfile(true)} className="mr-6">
-              <Image
-                src={user.picture || '/default-avatar.png'}
-                alt="Profile"
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
-            </button>
-            <LogoutButton />
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Navbar user={user} onProfileClick={() => setShowProfile(true)} />
       
       <main className="w-full max-w-7xl mx-auto px-4 py-8">
         {showProfile ? (

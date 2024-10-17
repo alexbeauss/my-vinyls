@@ -33,7 +33,7 @@ export default function AlbumDetails({ albumId }) {
   if (!album) return <div>Album non trouvé</div>;
 
   return (
-    <div className="flex flex-col md:flex-row">
+    <div className="flex flex-col md:flex-row dark:bg-gray-900 dark:text-white">
       <div className="md:w-1/3 mb-4 md:mb-0">
         <Image
           src={album.images[0].uri}
@@ -44,14 +44,14 @@ export default function AlbumDetails({ albumId }) {
         />
       </div>
       <div className="md:w-2/3 md:pl-8">
-        <h1 className="text-3xl font-bold mb-4">{album.title}</h1>
-        <p className="text-xl mb-2">{album.artists[0].name}</p>
-        <p className="mb-2">Année : {album.year}</p>
-        <p className="mb-2">Genre : {album.genres.join(', ')}</p>
-        <p className="mb-2">Styles : {album.styles.join(', ')}</p>
-        <p className="mb-4">Label : {album.labels[0].name}</p>
-        <h2 className="text-2xl font-bold mb-2">Tracklist :</h2>
-        <ul className="list-disc list-inside">
+        <h1 className="text-3xl font-bold mb-4 dark:text-white">{album.title}</h1>
+        <p className="text-xl mb-2 dark:text-gray-300">{album.artists[0].name}</p>
+        <p className="mb-2 dark:text-gray-400">Année : {album.year}</p>
+        <p className="mb-2 dark:text-gray-400">Genre : {album.genres.join(', ')}</p>
+        <p className="mb-2 dark:text-gray-400">Styles : {album.styles.join(', ')}</p>
+        <p className="mb-4 dark:text-gray-400">Label : {album.labels[0].name}</p>
+        <h2 className="text-2xl font-bold mb-2 dark:text-white">Tracklist :</h2>
+        <ul className="list-disc list-inside dark:text-gray-300">
           {album.tracklist.map((track, index) => (
             <li key={index}>{track.title} - {track.duration}</li>
           ))}

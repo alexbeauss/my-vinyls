@@ -1,48 +1,14 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useUser } from '@auth0/nextjs-auth0/client';
+import MoodSlider from './MoodSlider';
 
 export default function DynamicProfilePage() {
   const { user, error, isLoading } = useUser();
   const [discogsUsername, setDiscogsUsername] = useState('');
   const [discogsToken, setDiscogsToken] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
-  const [mood, setMood] = useState(5); // Valeur par défaut au milieu de l'échelle (0 à 10)
-  const sliderRef = useRef(null);
-  const isDraggingRef = useRef(false);
-
-  const handleMoodChange = (e) => {
-    if (!sliderRef.current) return;
-    const rect = sliderRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percentage = x / rect.width;
-    const newMood = parseFloat((percentage * 10).toFixed(2));
-    setMood(newMood);
-  };
-
-  const handleMouseDown = (e) => {
-    isDraggingRef.current = true;
-    handleMoodChange(e);
-  };
-
-  const handleMouseMove = (e) => {
-    if (isDraggingRef.current) {
-      handleMoodChange(e);
-    }
-  };
-
-  const handleMouseUp = () => {
-    isDraggingRef.current = false;
-  };
-
-  useEffect(() => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
+  const [mood, setMood] = useState(5);
 
   useEffect(() => {
     async function loadDiscogsCredentials() {
@@ -52,7 +18,7 @@ export default function DynamicProfilePage() {
           const data = await response.json();
           setDiscogsUsername(data.username || '');
           setDiscogsToken(data.token || '');
-          setMood(data.mood || 5); // Charger l'humeur, par défaut à 5 si non définie
+          setMood(data.mood || 5);
         } else if (response.status === 404) {
           console.log('Aucun identifiant Discogs trouvé pour cet utilisateur.');
         } else {
@@ -90,7 +56,7 @@ export default function DynamicProfilePage() {
   if (error) return <div>{error.message}</div>;
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-4 dark:bg-gray-900 dark:text-white">
       <h1 className="text-2xl font-bold mb-4">Profil</h1>
       <p>Nom : {user.name}</p>
       <p>Email : {user.email}</p>
@@ -103,7 +69,7 @@ export default function DynamicProfilePage() {
             id="discogsUsername"
             value={discogsUsername}
             onChange={(e) => setDiscogsUsername(e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
           />
         </div>
         <div className="mb-4">
@@ -113,35 +79,17 @@ export default function DynamicProfilePage() {
             id="discogsToken"
             value={discogsToken}
             onChange={(e) => setDiscogsToken(e.target.value)}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
           />
         </div>
         
-        <div className="mb-4">
-          <label className="block mb-2">Comment ça va aujourd&apos;hui ?</label>
-          <div className="relative h-6">
-            <div 
-              ref={sliderRef}
-              className="absolute top-1/2 left-0 right-0 h-1 bg-gray-300 rounded-full cursor-pointer"
-              onMouseDown={handleMouseDown}
-            ></div>
-            <div
-              className="absolute top-1/2 w-6 h-6 bg-white border-2 border-blue-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer"
-              style={{ left: `${mood * 10}%` }}
-              onMouseDown={handleMouseDown}
-            ></div>
-          </div>
-          <div className="flex justify-between mt-2 text-sm text-gray-600">
-            <span>Pas bien du tout</span>
-            <span>Très bien</span>
-          </div>
-        </div>
+        <MoodSlider initialMood={mood} onMoodChange={setMood} />
         
-        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">
+        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700">
           Sauvegarder les identifiants Discogs et l&apos;humeur
         </button>
       </form>
-      {saveStatus && <p className="mt-4 text-center font-bold">{saveStatus}</p>}
+      {saveStatus && <p className="mt-4 text-center font-bold dark:text-white">{saveStatus}</p>}
     </div>
   );
 }
