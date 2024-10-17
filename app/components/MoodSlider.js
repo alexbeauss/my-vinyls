@@ -1,12 +1,12 @@
 "use client";
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function MoodSlider({ initialMood, onMoodChange }) {
   const [mood, setMood] = useState(initialMood);
   const sliderRef = useRef(null);
   const isDraggingRef = useRef(false);
 
-  const handleMoodChange = (clientX) => {
+  const handleMoodChange = useCallback((clientX) => {
     if (!sliderRef.current) return;
     const rect = sliderRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
@@ -14,21 +14,21 @@ export default function MoodSlider({ initialMood, onMoodChange }) {
     const newMood = parseFloat((percentage * 10).toFixed(2));
     setMood(newMood);
     onMoodChange(newMood);
-  };
+  }, [onMoodChange]);
 
-  const handleStart = (e) => {
+  const handleStart = useCallback((e) => {
     isDraggingRef.current = true;
     handleMoodChange(e.type.includes('mouse') ? e.clientX : e.touches[0].clientX);
-  };
+  }, [handleMoodChange]);
 
-  const handleMove = (e) => {
+  const handleMove = useCallback((e) => {
     if (!isDraggingRef.current) return;
     handleMoodChange(e.type.includes('mouse') ? e.clientX : e.touches[0].clientX);
-  };
+  }, [handleMoodChange]);
 
-  const handleEnd = () => {
+  const handleEnd = useCallback(() => {
     isDraggingRef.current = false;
-  };
+  }, []);
 
   useEffect(() => {
     const handleGlobalMove = (e) => {
@@ -50,19 +50,19 @@ export default function MoodSlider({ initialMood, onMoodChange }) {
       document.removeEventListener('touchmove', handleGlobalMove);
       document.removeEventListener('touchend', handleGlobalEnd);
     };
-  }, []);
+  }, [handleMove, handleEnd]);
 
-  const getMoodText = () => {
+  const getMoodText = useCallback(() => {
     if (mood < 2) return "Très désagréable";
     if (mood < 4) return "Désagréable";
     if (mood < 6) return "Neutre";
     if (mood < 8) return "Agréable";
     return "Très agréable";
-  };
+  }, [mood]);
 
   return (
     <div className="mb-4 w-full max-w-md mx-auto px-4">
-      <p className="text-center text-xl font-semibold mb-4">Comment vous sentez-vous aujourd'hui ?</p>
+      <p className="text-center text-xl font-semibold mb-4">Comment vous sentez-vous aujourd&apos;hui ?</p>
       <div className="relative pt-6 pb-6">
         <div className="flex justify-between text-sm text-gray-500 absolute w-full" style={{top: 0}}>
           <span>Très désagréable</span>
