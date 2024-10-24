@@ -1,7 +1,6 @@
 "use client";
 import Link from 'next/link';
 import Image from 'next/image';
-import ThemeToggle from './ThemeToggle';
 import LogoutButton from './LogoutButton';
 
 export default function Navbar({ user, onProfileClick }) {
