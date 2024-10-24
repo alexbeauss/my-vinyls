@@ -12,10 +12,6 @@ export default function Navbar({ user, onProfileClick }) {
           my vinyls
         </Link>
         <div className="flex items-center">
-          <Link href="/search" className="text-white mr-6 hover:text-blue-200">
-            Rechercher
-          </Link>
-          <ThemeToggle />
           <button onClick={onProfileClick} className="ml-6 mr-6">
             <Image
               src={user.picture || '/default-avatar.png'}
