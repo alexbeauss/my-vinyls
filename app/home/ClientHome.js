@@ -54,7 +54,25 @@ export default function ClientHome({ onAlbumClick }) {
     fetchDiscogsData();
   }, [currentPage]);
 
-  const totalPages = discogsCollection ? Math.ceil(discogsCollection.pagination.items / itemsPerPage) : 0;
+  const sortedAndFilteredReleases = discogsCollection?.releases
+    .filter(release => 
+      genreFilters.length === 0 || 
+      release.basic_information.styles.some(style => genreFilters.includes(style))
+    )
+    .sort((a, b) => {
+      if (sortBy === 'artist') {
+        const artistA = a.basic_information.artists[0].name.toLowerCase();
+        const artistB = b.basic_information.artists[0].name.toLowerCase();
+        return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
+      } else if (sortBy === 'year') {
+        const yearA = a.basic_information.year || 0;
+        const yearB = b.basic_information.year || 0;
+        return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
+      }
+      return 0;
+    });
+
+  const totalPages = sortedAndFilteredReleases ? Math.ceil(sortedAndFilteredReleases.length / itemsPerPage) : 0; // Mettre à jour le calcul des pages
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
@@ -84,25 +102,8 @@ export default function ClientHome({ onAlbumClick }) {
         ? prev.filter(g => g !== genre) 
         : [...prev, genre]
     );
+    // Recalculer totalPages ici si nécessaire
   };
-
-  const sortedAndFilteredReleases = discogsCollection?.releases
-    .filter(release => 
-      genreFilters.length === 0 || 
-      release.basic_information.styles.some(style => genreFilters.includes(style))
-    )
-    .sort((a, b) => {
-      if (sortBy === 'artist') {
-        const artistA = a.basic_information.artists[0].name.toLowerCase();
-        const artistB = b.basic_information.artists[0].name.toLowerCase();
-        return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
-      } else if (sortBy === 'year') {
-        const yearA = a.basic_information.year || 0;
-        const yearB = b.basic_information.year || 0;
-        return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
-      }
-      return 0;
-    });
 
   return (
     <div className="container mx-auto px-4 dark:bg-gray-900 dark:text-white">
@@ -155,20 +156,21 @@ export default function ClientHome({ onAlbumClick }) {
                 </div>
               )}
             </div>
-            <div>
-              <button 
-                onClick={() => handleSort('artist')} 
-                className={`mr-2 px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-              >
-                Trier par artiste {sortBy === 'artist' && (sortOrder === 'asc' ? '↑' : '↓')}
-              </button>
-              <button 
-                onClick={() => handleSort('year')} 
-                className={`px-3 py-1 rounded ${sortBy === 'year' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-              >
-                Trier par année {sortBy === 'year' && (sortOrder === 'asc' ? '↑' : '↓')}
-              </button>
-            </div>
+          </div>
+          {/* Déplacer les boutons de tri ici */}
+          <div className="flex mb-4">
+            <button 
+              onClick={() => handleSort('artist')} 
+              className={`mr-2 px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
+            >
+              Trier par artiste {sortBy === 'artist' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button 
+              onClick={() => handleSort('year')} 
+              className={`px-3 py-1 rounded ${sortBy === 'year' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
+            >
+              Trier par année {sortBy === 'year' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
           </div>
           <div className="flex flex-wrap items-center mb-4">
             <div className="w-full mb-2">
