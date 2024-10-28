@@ -16,7 +16,7 @@ const nextConfig = {
     ];
   },
   images: {
-    domains: ['lh3.googleusercontent.com','i.discogs.com'],
+    domains: ['lh3.googleusercontent.com','i.discogs.com','st.discogs.com'],
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {

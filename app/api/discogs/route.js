@@ -4,7 +4,7 @@ import { docClient } from '../../lib/awsConfig';
 import Discogs from 'disconnect';
 import axios from 'axios';
 
-export async function GET(req) {
+export async function GET() {
   const session = await getSession();
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authentifié' }), {
@@ -14,9 +14,6 @@ export async function GET(req) {
   }
 
   const userId = session.user.sub;
-  const { searchParams } = new URL(req.url);
-  const page = parseInt(searchParams.get('page')) || 1;
-  const per_page = parseInt(searchParams.get('per_page')) || 100;
 
   try {
     const getCommand = new GetCommand({
@@ -35,13 +32,26 @@ export async function GET(req) {
 
     const { discogsUsername, discogsToken } = response.Item;
 
+    // Récupérer toutes les pages de la collection
     const dis = new Discogs.Client({ userToken: discogsToken });
-    const collection = await dis.user().collection().getReleases(discogsUsername, 0, {
-      page: page,
-      per_page: per_page
-    });
+    let allReleases = [];
+    let page = 1;
+    let hasMorePages = true;
 
-    // Récupérer la valeur de la collection via un appel API direct
+    while (hasMorePages) {
+      const pageData = await dis.user().collection().getReleases(discogsUsername, 0, {
+        page: page,
+        per_page: 100
+      });
+
+      allReleases = [...allReleases, ...pageData.releases];
+      
+      // Vérifier s'il y a plus de pages
+      hasMorePages = pageData.pagination.page < pageData.pagination.pages;
+      page++;
+    }
+
+    // Récupérer la valeur de la collection
     const collectionValueResponse = await axios.get(`https://api.discogs.com/users/${discogsUsername}/collection/value`, {
       headers: {
         'Authorization': `Discogs token=${discogsToken}`,
@@ -49,9 +59,10 @@ export async function GET(req) {
       }
     });
 
-    const collectionValue = collectionValueResponse.data;
-
-    return new Response(JSON.stringify({ collection, collectionValue }), {
+    return new Response(JSON.stringify({
+      releases: allReleases,
+      collectionValue: collectionValueResponse.data
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

@@ -12,25 +12,31 @@ export default function ClientHome({ onAlbumClick }) {
   const [randomAlbum, setRandomAlbum] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState('artist');
   const [sortOrder, setSortOrder] = useState('asc');
   const [genreFilters, setGenreFilters] = useState([]);
-  const itemsPerPage = 100;
 
   useEffect(() => {
     async function fetchDiscogsData() {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/discogs?page=${currentPage}&per_page=${itemsPerPage}`);
+        const response = await fetch('/api/discogs');
         if (!response.ok) {
           throw new Error('Erreur lors de la récupération des données Discogs');
         }
         const data = await response.json();
-        setDiscogsCollection(data.collection);
+        
+        // Vérification que data est bien un objet
+        if (typeof data !== 'object') {
+          console.error('Les données reçues ne sont pas un objet:', data);
+          throw new Error('Format de données incorrect');
+        }
+
+        // Stockage direct des releases et de la valeur de la collection
+        setDiscogsCollection(data.releases);
         setCollectionValue(data.collectionValue);
         
-        // Logique pour l'album "à écouter aujourd'hui"
+        // Mise à jour de la logique de l'album aléatoire
         const today = getTodayDate();
         const storedAlbum = localStorage.getItem('randomAlbum');
         const storedDate = localStorage.getItem('randomAlbumDate');
@@ -38,8 +44,8 @@ export default function ClientHome({ onAlbumClick }) {
         if (storedAlbum && storedDate === today) {
           setRandomAlbum(JSON.parse(storedAlbum));
         } else {
-          const randomIndex = Math.floor(Math.random() * data.collection.releases.length);
-          const newRandomAlbum = data.collection.releases[randomIndex];
+          const randomIndex = Math.floor(Math.random() * data.releases.length);
+          const newRandomAlbum = data.releases[randomIndex];
           setRandomAlbum(newRandomAlbum);
           localStorage.setItem('randomAlbum', JSON.stringify(newRandomAlbum));
           localStorage.setItem('randomAlbumDate', today);
@@ -52,37 +58,13 @@ export default function ClientHome({ onAlbumClick }) {
     }
 
     fetchDiscogsData();
-  }, [currentPage]);
+  }, []);
 
-  const sortedAndFilteredReleases = discogsCollection?.releases
-    .filter(release => 
-      genreFilters.length === 0 || 
-      release.basic_information.styles.some(style => genreFilters.includes(style))
-    )
-    .sort((a, b) => {
-      if (sortBy === 'artist') {
-        const artistA = a.basic_information.artists[0].name.toLowerCase();
-        const artistB = b.basic_information.artists[0].name.toLowerCase();
-        return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
-      } else if (sortBy === 'year') {
-        const yearA = a.basic_information.year || 0;
-        const yearB = b.basic_information.year || 0;
-        return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
-      }
-      return 0;
-    });
-
-  const totalPages = sortedAndFilteredReleases ? Math.ceil(sortedAndFilteredReleases.length / itemsPerPage) : 0; // Mettre à jour le calcul des pages
-
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage);
-  };
-
-  const handleSort = (criteria) => {
-    if (sortBy === criteria) {
+  const handleSort = (newSortBy) => {
+    if (sortBy === newSortBy) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortBy(criteria);
+      setSortBy(newSortBy);
       setSortOrder('asc');
     }
   };
@@ -90,8 +72,10 @@ export default function ClientHome({ onAlbumClick }) {
   const getUniqueGenres = () => {
     if (!discogsCollection) return [];
     const genres = new Set();
-    discogsCollection.releases.forEach(release => {
-      release.basic_information.styles.forEach(style => genres.add(style));
+    discogsCollection.forEach(release => {
+      if (release.basic_information.styles) {
+        release.basic_information.styles.forEach(style => genres.add(style));
+      }
     });
     return Array.from(genres).sort();
   };
@@ -102,8 +86,27 @@ export default function ClientHome({ onAlbumClick }) {
         ? prev.filter(g => g !== genre) 
         : [...prev, genre]
     );
-    // Recalculer totalPages ici si nécessaire
   };
+
+  const sortedAndFilteredReleases = discogsCollection ? 
+    [...discogsCollection] // Création d'une copie du tableau pour éviter la mutation
+      .filter(release => 
+        genreFilters.length === 0 || 
+        (release.basic_information.styles && 
+         release.basic_information.styles.some(style => genreFilters.includes(style)))
+      )
+      .sort((a, b) => {
+        if (sortBy === 'artist') {
+          const artistA = a.basic_information.artists[0].name.toLowerCase();
+          const artistB = b.basic_information.artists[0].name.toLowerCase();
+          return sortOrder === 'asc' ? artistA.localeCompare(artistB) : artistB.localeCompare(artistA);
+        } else if (sortBy === 'year') {
+          const yearA = a.basic_information.year || 0;
+          const yearB = b.basic_information.year || 0;
+          return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
+        }
+        return 0;
+      }) : [];
 
   return (
     <div className="container mx-auto px-4 dark:bg-gray-900 dark:text-white">
@@ -142,7 +145,9 @@ export default function ClientHome({ onAlbumClick }) {
           <h1 className="text-3xl font-bold mt-8 mb-4 dark:text-white">Ma collection</h1>
           <div className="flex justify-between items-center mb-4">
             <div>
-              <p className="text-3xl font-bold text-blue-800 dark:text-blue-400 mt-1">{discogsCollection.pagination.items} disques</p>
+              <p className="text-3xl font-bold text-blue-800 dark:text-blue-400 mt-1">
+                {discogsCollection ? discogsCollection.length : 0} disques
+              </p>
               {collectionValue && (
                 <div className="text-gray-600 dark:text-gray-400 mt-1">
                   <p className="text-xl">
@@ -191,7 +196,7 @@ export default function ClientHome({ onAlbumClick }) {
             ))}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {sortedAndFilteredReleases.map((release) => (
+            {sortedAndFilteredReleases && sortedAndFilteredReleases.map((release) => (
               <div 
                 key={release.id} 
                 onClick={() => onAlbumClick(release.id)}
@@ -217,27 +222,6 @@ export default function ClientHome({ onAlbumClick }) {
                 </div>
               </div>
             ))}
-          </div>
-          <div className="mt-8 flex justify-center">
-            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                Précédent
-              </button>
-              <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-300">
-                Page {currentPage} sur {totalPages}
-              </span>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white dark:bg-gray-800 dark:border-gray-600 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                Suivant
-              </button>
-            </nav>
           </div>
         </div>
       )}
