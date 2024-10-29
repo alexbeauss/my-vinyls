@@ -71,13 +71,17 @@ export default function ClientHome({ onAlbumClick }) {
 
   const getUniqueGenres = () => {
     if (!discogsCollection) return [];
-    const genres = new Set();
+    const genreCounts = {};
     discogsCollection.forEach(release => {
       if (release.basic_information.styles) {
-        release.basic_information.styles.forEach(style => genres.add(style));
+        release.basic_information.styles.forEach(style => {
+          genreCounts[style] = (genreCounts[style] || 0) + 1;
+        });
       }
     });
-    return Array.from(genres).sort();
+    return Object.entries(genreCounts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([genre, count]) => ({ genre, count }));
   };
 
   const handleGenreFilterChange = (genre) => {
@@ -181,7 +185,7 @@ export default function ClientHome({ onAlbumClick }) {
             <div className="w-full mb-2">
               <span className="font-bold dark:text-white">Filtrer par genre :</span>
             </div>
-            {getUniqueGenres().map(genre => (
+            {getUniqueGenres().map(({ genre, count }) => (
               <div key={genre} className="mr-4 mb-2">
                 <label className="inline-flex items-center">
                   <input
@@ -190,7 +194,9 @@ export default function ClientHome({ onAlbumClick }) {
                     checked={genreFilters.includes(genre)}
                     onChange={() => handleGenreFilterChange(genre)}
                   />
-                  <span className="ml-2 text-gray-700 dark:text-gray-300">{genre}</span>
+                  <span className="ml-2 text-gray-700 dark:text-gray-300">
+                    {genre} <span className="text-gray-500 dark:text-gray-400">({count})</span>
+                  </span>
                 </label>
               </div>
             ))}
