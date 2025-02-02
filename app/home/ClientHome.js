@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 export default function ClientHome({ onAlbumClick }) {
-  const [discogsCollection, setDiscogsCollection] = useState(null);
+  const [discogsCollection, setDiscogsCollection] = useState([]);
   const [collectionValue, setCollectionValue] = useState(null);
-  const [randomAlbum, setRandomAlbum] = useState(null);
+  const [randomAlbum, setRandomAlbum] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('artist');
@@ -14,15 +14,7 @@ export default function ClientHome({ onAlbumClick }) {
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const storedAlbums = JSON.parse(localStorage.getItem('randomAlbums'));
-    
-    if (storedAlbums && storedAlbums.date === today) {
-      setRandomAlbum(storedAlbums.albums);
-      setIsLoading(false);
-    } else {
-      fetchDiscogsData();
-    }
+    fetchDiscogsData();
   }, []);
 
   const fetchDiscogsData = async () => {
@@ -39,21 +31,28 @@ export default function ClientHome({ onAlbumClick }) {
         throw new Error('Format de données incorrect');
       }
 
-      setDiscogsCollection(data.releases);
+      setDiscogsCollection(data.releases || []);
       setCollectionValue(data.collectionValue);
 
-      // Sélection de trois albums aléatoires
-      const randomAlbums = [];
-      const usedIndices = new Set();
-      while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
-        const randomIndex = Math.floor(Math.random() * data.releases.length);
-        if (!usedIndices.has(randomIndex)) {
-          randomAlbums.push(data.releases[randomIndex]);
-          usedIndices.add(randomIndex);
+      // Gestion des albums aléatoires
+      const today = new Date().toISOString().split('T')[0];
+      const storedAlbums = JSON.parse(localStorage.getItem('randomAlbums'));
+
+      if (storedAlbums && storedAlbums.date === today) {
+        setRandomAlbum(storedAlbums.albums);
+      } else {
+        const randomAlbums = [];
+        const usedIndices = new Set();
+        while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
+          const randomIndex = Math.floor(Math.random() * data.releases.length);
+          if (!usedIndices.has(randomIndex)) {
+            randomAlbums.push(data.releases[randomIndex]);
+            usedIndices.add(randomIndex);
+          }
         }
+        setRandomAlbum(randomAlbums);
+        localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
       }
-      setRandomAlbum(randomAlbums);
-      localStorage.setItem('randomAlbums', JSON.stringify({ date: new Date().toISOString().split('T')[0], albums: randomAlbums }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -165,13 +164,13 @@ export default function ClientHome({ onAlbumClick }) {
 
       {isLoading && <p className="dark:text-white">Chargement de votre collection...</p>}
       {error && <p className="text-red-500 dark:text-red-400">Erreur : {error}</p>}
-      {discogsCollection && (
+      {discogsCollection.length > 0 && (
         <div>
           <h1 className="text-3xl font-bold mt-8 mb-4 dark:text-white">Ma collection</h1>
           <div className="flex justify-between items-center mb-4">
             <div>
               <p className="text-3xl font-bold text-blue-800 dark:text-blue-400 mt-1">
-                {discogsCollection ? discogsCollection.length : 0} disques
+                {discogsCollection.length} disques
               </p>
               {collectionValue && (
                 <div className="text-gray-600 dark:text-gray-400 mt-1">
@@ -223,7 +222,7 @@ export default function ClientHome({ onAlbumClick }) {
             ))}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
-            {sortedAndFilteredReleases && sortedAndFilteredReleases.map((release) => (
+            {sortedAndFilteredReleases.map((release) => (
               <div 
                 key={release.id} 
                 onClick={() => onAlbumClick(release.id)}
