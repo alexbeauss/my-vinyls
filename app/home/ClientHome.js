@@ -2,10 +2,6 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
-const getTodayDate = () => {
-  return new Date().toISOString().split('T')[0];
-};
-
 export default function ClientHome({ onAlbumClick }) {
   const [discogsCollection, setDiscogsCollection] = useState(null);
   const [collectionValue, setCollectionValue] = useState(null);
@@ -107,13 +103,6 @@ export default function ClientHome({ onAlbumClick }) {
         }
         return 0;
       }) : [];
-
-  const getAlbumsByGenre = (genre) => {
-    if (!discogsCollection) return [];
-    return discogsCollection.filter(release => 
-      release.basic_information.genres.includes(genre)
-    );
-  };
 
   const handleNext = () => {
     setCarouselIndex((prevIndex) => (prevIndex + 1) % 3);
