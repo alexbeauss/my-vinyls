@@ -14,43 +14,52 @@ export default function ClientHome({ onAlbumClick }) {
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   useEffect(() => {
-    async function fetchDiscogsData() {
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/discogs');
-        if (!response.ok) {
-          throw new Error('Erreur lors de la récupération des données Discogs');
-        }
-        const data = await response.json();
-        
-        if (typeof data !== 'object') {
-          console.error('Les données reçues ne sont pas un objet:', data);
-          throw new Error('Format de données incorrect');
-        }
-
-        setDiscogsCollection(data.releases);
-        setCollectionValue(data.collectionValue);
-
-        // Sélection de trois albums aléatoires
-        const randomAlbums = [];
-        const usedIndices = new Set();
-        while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
-          const randomIndex = Math.floor(Math.random() * data.releases.length);
-          if (!usedIndices.has(randomIndex)) {
-            randomAlbums.push(data.releases[randomIndex]);
-            usedIndices.add(randomIndex);
-          }
-        }
-        setRandomAlbum(randomAlbums);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
+    const today = new Date().toISOString().split('T')[0];
+    const storedAlbums = JSON.parse(localStorage.getItem('randomAlbums'));
+    
+    if (storedAlbums && storedAlbums.date === today) {
+      setRandomAlbum(storedAlbums.albums);
+      setIsLoading(false);
+    } else {
+      fetchDiscogsData();
     }
-
-    fetchDiscogsData();
   }, []);
+
+  const fetchDiscogsData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/discogs');
+      if (!response.ok) {
+        throw new Error('Erreur lors de la récupération des données Discogs');
+      }
+      const data = await response.json();
+      
+      if (typeof data !== 'object') {
+        console.error('Les données reçues ne sont pas un objet:', data);
+        throw new Error('Format de données incorrect');
+      }
+
+      setDiscogsCollection(data.releases);
+      setCollectionValue(data.collectionValue);
+
+      // Sélection de trois albums aléatoires
+      const randomAlbums = [];
+      const usedIndices = new Set();
+      while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
+        const randomIndex = Math.floor(Math.random() * data.releases.length);
+        if (!usedIndices.has(randomIndex)) {
+          randomAlbums.push(data.releases[randomIndex]);
+          usedIndices.add(randomIndex);
+        }
+      }
+      setRandomAlbum(randomAlbums);
+      localStorage.setItem('randomAlbums', JSON.stringify({ date: new Date().toISOString().split('T')[0], albums: randomAlbums }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSort = (newSortBy) => {
     if (sortBy === newSortBy) {
