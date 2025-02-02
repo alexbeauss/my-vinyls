@@ -27,30 +27,25 @@ export default function ClientHome({ onAlbumClick }) {
         }
         const data = await response.json();
         
-        // Vérification que data est bien un objet
         if (typeof data !== 'object') {
           console.error('Les données reçues ne sont pas un objet:', data);
           throw new Error('Format de données incorrect');
         }
 
-        // Stockage direct des releases et de la valeur de la collection
         setDiscogsCollection(data.releases);
         setCollectionValue(data.collectionValue);
-        
-        // Mise à jour de la logique de l'album aléatoire
-        const today = getTodayDate();
-        const storedAlbum = localStorage.getItem('randomAlbum');
-        const storedDate = localStorage.getItem('randomAlbumDate');
 
-        if (storedAlbum && storedDate === today) {
-          setRandomAlbum(JSON.parse(storedAlbum));
-        } else {
+        // Sélection de trois albums aléatoires
+        const randomAlbums = [];
+        const usedIndices = new Set();
+        while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
           const randomIndex = Math.floor(Math.random() * data.releases.length);
-          const newRandomAlbum = data.releases[randomIndex];
-          setRandomAlbum(newRandomAlbum);
-          localStorage.setItem('randomAlbum', JSON.stringify(newRandomAlbum));
-          localStorage.setItem('randomAlbumDate', today);
+          if (!usedIndices.has(randomIndex)) {
+            randomAlbums.push(data.releases[randomIndex]);
+            usedIndices.add(randomIndex);
+          }
         }
+        setRandomAlbum(randomAlbums);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -128,14 +123,11 @@ export default function ClientHome({ onAlbumClick }) {
     setCarouselIndex((prevIndex) => (prevIndex - 1 + 3) % 3);
   };
 
-  const genre = randomAlbum ? randomAlbum.basic_information.genres[0] : null;
-  const albumsByGenre = genre ? getAlbumsByGenre(genre) : [];
-
   return (
     <div className="container mx-auto px-4 dark:bg-gray-900 dark:text-white">
       
       {/* Section "À écouter aujourd'hui" transformée en carrousel */}
-      {albumsByGenre.length > 0 && (
+      {randomAlbum && randomAlbum.length > 0 && (
         <div className="mb-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
           <h2 className="text-3xl font-bold mb-4 dark:text-white">À écouter aujourd&apos;hui</h2>
           <div className="flex items-center justify-between">
@@ -146,22 +138,22 @@ export default function ClientHome({ onAlbumClick }) {
             </button>
             <div 
               className="flex items-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-lg p-2"
-              onClick={() => onAlbumClick(albumsByGenre[carouselIndex].id)}
+              onClick={() => onAlbumClick(randomAlbum[carouselIndex].id)}
             >
               <div className="w-32 h-32 md:w-48 md:h-48 relative mr-4">
                 <Image
-                  src={albumsByGenre[carouselIndex].basic_information.cover_image}
-                  alt={`Pochette de ${albumsByGenre[carouselIndex].basic_information.title}`}
+                  src={randomAlbum[carouselIndex].basic_information.cover_image}
+                  alt={`Pochette de ${randomAlbum[carouselIndex].basic_information.title}`}
                   layout="fill"
                   objectFit="cover"
                   className="rounded shadow"
                 />
               </div>
               <div className="text-lg md:text-xl">
-                <h3 className="font-bold dark:text-white">{albumsByGenre[carouselIndex].basic_information.title}</h3>
-                <p className="dark:text-gray-300">{albumsByGenre[carouselIndex].basic_information.artists[0].name}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Année : {albumsByGenre[carouselIndex].basic_information.year || 'N/A'}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Genre : {albumsByGenre[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
+                <h3 className="font-bold dark:text-white">{randomAlbum[carouselIndex].basic_information.title}</h3>
+                <p className="dark:text-gray-300">{randomAlbum[carouselIndex].basic_information.artists[0].name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
               </div>
             </div>
             <button onClick={handleNext} className="text-lg font-bold dark:text-white">
