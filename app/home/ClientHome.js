@@ -12,6 +12,7 @@ export default function ClientHome({ onAlbumClick }) {
   const [sortOrder, setSortOrder] = useState('asc');
   const [genreFilters, setGenreFilters] = useState([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const [showGenreFilters, setShowGenreFilters] = useState(false);
 
   useEffect(() => {
     fetchDiscogsData();
@@ -187,10 +188,10 @@ export default function ClientHome({ onAlbumClick }) {
             </div>
           </div>
           {/* Déplacer les boutons de tri ici */}
-          <div className="flex mb-4">
+          <div className="flex mb-4 gap-2">
             <button 
               onClick={() => handleSort('artist')} 
-              className={`mr-2 px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
+              className={`px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
             >
               Trier par artiste {sortBy === 'artist' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
@@ -200,27 +201,35 @@ export default function ClientHome({ onAlbumClick }) {
             >
               Trier par année {sortBy === 'year' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
+            <button
+              onClick={() => setShowGenreFilters(!showGenreFilters)}
+              className={`px-3 py-1 rounded ${showGenreFilters ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
+            >
+              {showGenreFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
+            </button>
           </div>
-          <div className="flex flex-wrap items-center mb-4">
-            <div className="w-full mb-2">
-              <span className="font-bold dark:text-white">Filtrer par genre :</span>
-            </div>
-            {getUniqueGenres().map(({ genre, count }) => (
-              <div key={genre} className="mr-4 mb-2">
-                <label className="inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    className="form-checkbox h-5 w-5 text-blue-600 dark:text-blue-400"
-                    checked={genreFilters.includes(genre)}
-                    onChange={() => handleGenreFilterChange(genre)}
-                  />
-                  <span className="ml-2 text-gray-700 dark:text-gray-300">
-                    {genre} <span className="text-gray-500 dark:text-gray-400">({count})</span>
-                  </span>
-                </label>
+          {showGenreFilters && (
+            <div className="flex flex-wrap items-center mb-4">
+              <div className="w-full mb-2">
+                <span className="font-bold dark:text-white">Filtrer par genre :</span>
               </div>
-            ))}
-          </div>
+              {getUniqueGenres().map(({ genre, count }) => (
+                <div key={genre} className="mr-4 mb-2">
+                  <label className="inline-flex items-center">
+                    <input
+                      type="checkbox"
+                      className="form-checkbox h-5 w-5 text-blue-600 dark:text-blue-400"
+                      checked={genreFilters.includes(genre)}
+                      onChange={() => handleGenreFilterChange(genre)}
+                    />
+                    <span className="ml-2 text-gray-700 dark:text-gray-300">
+                      {genre} <span className="text-gray-500 dark:text-gray-400">({count})</span>
+                    </span>
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
             {sortedAndFilteredReleases.map((release) => (
               <div 
