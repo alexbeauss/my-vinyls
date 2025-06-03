@@ -138,7 +138,7 @@ export default function ClientHome({ onAlbumClick }) {
               className="flex items-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-lg p-2"
               onClick={() => onAlbumClick(randomAlbum[carouselIndex].id)}
             >
-              <div className="w-32 h-32 md:w-48 md:h-48 relative mr-4">
+              <div className="w-32 h-32 md:w-48 md:h-48 relative mr-4 flex-shrink-0">
                 <Image
                   src={randomAlbum[carouselIndex].basic_information.cover_image}
                   alt={`Pochette de ${randomAlbum[carouselIndex].basic_information.title}`}
@@ -147,11 +147,11 @@ export default function ClientHome({ onAlbumClick }) {
                   className="rounded shadow"
                 />
               </div>
-              <div className="text-lg md:text-xl">
-                <h3 className="font-bold dark:text-white">{randomAlbum[carouselIndex].basic_information.title}</h3>
-                <p className="dark:text-gray-300">{randomAlbum[carouselIndex].basic_information.artists[0].name}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
+              <div className="text-base md:text-xl">
+                <h3 className="font-bold dark:text-white text-sm md:text-lg">{randomAlbum[carouselIndex].basic_information.title}</h3>
+                <p className="dark:text-gray-300 text-sm md:text-base">{randomAlbum[carouselIndex].basic_information.artists[0].name}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
               </div>
             </div>
             <button onClick={handleNext} className="text-lg font-bold dark:text-white">
