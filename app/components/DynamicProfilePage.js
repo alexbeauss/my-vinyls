@@ -83,10 +83,8 @@ export default function DynamicProfilePage() {
           />
         </div>
         
-        <MoodSlider initialMood={mood} onMoodChange={setMood} />
-        
         <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700">
-          Sauvegarder les identifiants Discogs et l&apos;humeur
+          Sauvegarder les identifiants Discogs
         </button>
       </form>
       {saveStatus && <p className="mt-4 text-center font-bold dark:text-white">{saveStatus}</p>}

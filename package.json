@@ -16,6 +16,7 @@
     "@aws-sdk/credential-providers": "^3.670.0",
     "@aws-sdk/lib-dynamodb": "^3.665.0",
     "@ericblade/quagga2": "^1.8.4",
+    "@google/generative-ai": "^0.24.1",
     "@next-auth/dynamodb-adapter": "^3.0.2",
     "@prisma/client": "^5.20.0",
     "aws-sdk": "^2.1691.0",

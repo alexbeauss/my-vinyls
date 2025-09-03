@@ -4,7 +4,7 @@ import { docClient } from '../../../lib/awsConfig';
 import Discogs from 'disconnect';
 
 export async function GET(req, { params }) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
@@ -13,7 +13,7 @@ export async function GET(req, { params }) {
   }
 
   const userId = session.user.sub;
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const getCommand = new GetCommand({

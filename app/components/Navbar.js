@@ -5,7 +5,7 @@ import Image from 'next/image';
 import LogoutButton from './LogoutButton';
 import SearchModal from './SearchModal';
 
-export default function Navbar({ user, onProfileClick }) {
+export default function Navbar({ user, onProfileClick, onSearchToggle }) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [discogsCollection, setDiscogsCollection] = useState([]);
 
@@ -33,7 +33,10 @@ export default function Navbar({ user, onProfileClick }) {
         </Link>
         <div className="flex items-center">
           <button 
-            onClick={() => setIsSearchOpen(true)}
+            onClick={() => {
+              setIsSearchOpen(true);
+              onSearchToggle?.(true);
+            }}
             className="text-white hover:text-gray-200 mr-6"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -56,7 +59,10 @@ export default function Navbar({ user, onProfileClick }) {
       {discogsCollection && (
         <SearchModal 
           isOpen={isSearchOpen} 
-          onClose={() => setIsSearchOpen(false)} 
+          onClose={() => {
+            setIsSearchOpen(false);
+            onSearchToggle?.(false);
+          }} 
           discogsCollection={discogsCollection}
         />
       )}
