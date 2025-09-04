@@ -1,6 +1,11 @@
 import { getSession } from '@auth0/nextjs-auth0';
 import { redirect } from 'next/navigation';
 
+export const metadata = {
+  title: 'MyVinyls - Votre collection de vinyles',
+  description: 'Découvrez et gérez votre collection de vinyles avec des critiques IA personnalisées',
+};
+
 export default async function HomePage() {
   const session = await getSession();
 
