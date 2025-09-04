@@ -27,8 +27,31 @@ export default function AlbumDetails({ albumId }) {
       }
     }
 
+    async function fetchExistingReview() {
+      try {
+        const response = await fetch(`/api/album/${albumId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.review) {
+            setReview(data.review);
+            setRating(data.rating);
+          }
+        }
+      } catch (err) {
+        // Silencieux - pas de critique existante
+        console.log('Aucune critique existante trouvée');
+      }
+    }
+
     if (albumId) {
       fetchAlbumDetails();
+      fetchExistingReview();
     }
   }, [albumId]);
 
@@ -109,7 +132,7 @@ export default function AlbumDetails({ albumId }) {
             </div>
             
             {/* Métadonnées */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                   Année
@@ -127,27 +150,31 @@ export default function AlbumDetails({ albumId }) {
                   {album.labels[0].name}
                 </div>
               </div>
+              
+              {/* Note IA */}
+              {rating && (
+                <div className={`rounded-lg p-4 border border-gray-200 dark:border-gray-700 ${getRatingBgColor(rating)}`}>
+                  <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                    Note IA
+                  </div>
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <span className={`text-2xl font-bold ${getRatingColor(rating)}`}>
+                      {rating.toFixed(1)}
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">/10</span>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Genres et styles */}
             <div className="space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                    Genres
-                  </div>
-                  {/* Note IA sur la même ligne que Genres */}
-                  {rating && (
-                    <div className={`inline-flex items-center px-3 py-1 rounded-lg ${getRatingBgColor(rating)} border border-gray-200 dark:border-gray-700`}>
-                      <svg className="w-4 h-4 mr-1 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                      </svg>
-                      <span className={`text-lg font-bold ${getRatingColor(rating)}`}>
-                        {rating.toFixed(1)}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">/10</span>
-                    </div>
-                  )}
+                <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                  Genres
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {album.genres.map((genre, index) => (
@@ -181,42 +208,8 @@ export default function AlbumDetails({ albumId }) {
         </div>
       </div>
       
-      {/* Tracklist */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-6 mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
-          <svg className="w-6 h-6 mr-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-          </svg>
-          Tracklist
-        </h2>
-        <div className="space-y-3">
-          {album.tracklist.map((track, index) => (
-            <div 
-              key={index}
-              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                    {index + 1}
-                  </span>
-                </div>
-                <span className="text-gray-900 dark:text-white font-medium">
-                  {track.title}
-                </span>
-              </div>
-              {track.duration && (
-                <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">
-                  {track.duration}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      
       {/* Section Critique */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-6 mb-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
             <svg className="w-6 h-6 mr-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,9 +277,22 @@ export default function AlbumDetails({ albumId }) {
                 <span>Critique générée par Google Gemini</span>
               </div>
               <button
-                onClick={() => {
+                onClick={async () => {
                   setReview(null);
                   setRating(null);
+                  // Supprimer la critique existante et en générer une nouvelle
+                  try {
+                    await fetch(`/api/album/${albumId}/review`, {
+                      method: 'DELETE',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                    });
+                    // Générer une nouvelle critique
+                    await generateReview();
+                  } catch (err) {
+                    console.error('Erreur lors de la régénération:', err);
+                  }
                 }}
                 className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
@@ -295,6 +301,40 @@ export default function AlbumDetails({ albumId }) {
             </div>
           </div>
         )}
+      </div>
+      
+      {/* Tracklist */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
+          <svg className="w-6 h-6 mr-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+          Tracklist
+        </h2>
+        <div className="space-y-3">
+          {album.tracklist.map((track, index) => (
+            <div 
+              key={index}
+              className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+            >
+              <div className="flex items-center space-x-4">
+                <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                    {index + 1}
+                  </span>
+                </div>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  {track.title}
+                </span>
+              </div>
+              {track.duration && (
+                <span className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                  {track.duration}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

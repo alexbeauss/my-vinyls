@@ -1,5 +1,5 @@
 import { getSession } from '@auth0/nextjs-auth0';
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../../../lib/awsConfig';
 import Discogs from 'disconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -17,6 +17,34 @@ export async function POST(req, { params }) {
   const { id } = await params;
 
   try {
+    // Vérifier si une critique existe déjà pour cet album et cet utilisateur
+    const getReviewCommand = new GetCommand({
+      TableName: "AlbumReviews",
+      Key: { 
+        albumId: id,
+        userId: userId 
+      },
+    });
+
+    const existingReviewResponse = await docClient.send(getReviewCommand);
+
+    if (existingReviewResponse.Item) {
+      return new Response(JSON.stringify({ 
+        review: existingReviewResponse.Item.review,
+        rating: existingReviewResponse.Item.rating,
+        albumInfo: {
+          title: existingReviewResponse.Item.albumTitle,
+          artists: [existingReviewResponse.Item.albumArtist],
+          year: existingReviewResponse.Item.albumYear,
+          genres: existingReviewResponse.Item.genres || [],
+          styles: existingReviewResponse.Item.styles || []
+        }
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Récupérer les identifiants Discogs
     const getCommand = new GetCommand({
       TableName: "UserDiscogsCredentials",
@@ -59,7 +87,15 @@ Tracklist: ${albumDetails.tracklist ? albumDetails.tracklist.map(track => `${tra
 3. L'influence et l'impact de l'album
 4. Une conclusion avec une note sur 10 avec une décimale.
 
-Sois particulièrement exigeant et ne mets pas trop d'emphase, utilise un ton professionnel mais accessible, évite toutes les formulations génériques et n'utilise aucune formule type "ce n'est pas simplement un album", "ce n'est pas une simple collection de chansons" ou toutes les formulations qui s'en rapprochent.`;
+IMPORTANT : Varie ton style d'écriture à chaque critique. Utilise différents angles d'approche :
+- Commence parfois par une observation technique, parfois par le contexte historique, parfois par une métaphore
+- JAMAIS de négation au début : n'utilise JAMAIS de phrases qui commencent par "n'est pas", "ce n'est pas", "ne se contente pas de", "va au-delà de", "transcende", "dépasse", "ne se limite pas à", "ne se résume pas à", "n'est pas qu'un simple", "n'est pas une simple", "n'est pas qu'une simple"
+- Commence TOUJOURS par dire ce que l'album EST, pas ce qu'il n'est pas
+- Évite absolument les formules génériques comme "ce n'est pas simplement un album", "n'est pas une simple consolidation", "ce n'est pas une simple collection de chansons", "ce n'est pas qu'un simple", "ne se contente pas de", "va au-delà de", "transcende le simple", "dépasse la simple", "n'est pas qu'une simple", "ne se limite pas à", "ne se résume pas à"
+- Utilise un vocabulaire riche et varié
+- Sois direct et évite les périphrases
+- Adopte un ton professionnel mais accessible, sans emphase excessive
+- Chaque critique doit avoir sa propre personnalité et son propre rythme`;
 
     // Générer la critique avec Gemini
     const result = await model.generateContent(prompt);
@@ -77,9 +113,29 @@ Sois particulièrement exigeant et ne mets pas trop d'emphase, utilise un ton pr
       if (rating > 10) rating = 10;
     }
 
+    // Sauvegarder la critique en base de données DynamoDB
+    const putReviewCommand = new PutCommand({
+      TableName: "AlbumReviews",
+      Item: {
+        albumId: id,
+        userId: userId,
+        review: review,
+        rating: rating || 0,
+        albumTitle: albumDetails.title,
+        albumArtist: albumDetails.artists.map(artist => artist.name).join(', '),
+        albumYear: albumDetails.year,
+        genres: albumDetails.genres || [],
+        styles: albumDetails.styles || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    await docClient.send(putReviewCommand);
+
     return new Response(JSON.stringify({ 
-      review,
-      rating,
+      review: review,
+      rating: rating || 0,
       albumInfo: {
         title: albumDetails.title,
         artists: albumDetails.artists.map(artist => artist.name),
@@ -95,6 +151,44 @@ Sois particulièrement exigeant et ne mets pas trop d'emphase, utilise un ton pr
   } catch (error) {
     console.error('Erreur lors de la génération de la critique:', error);
     return new Response(JSON.stringify({ error: 'Échec de la génération de la critique' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+export async function DELETE(req, { params }) {
+  const session = await getSession(req);
+  if (!session || !session.user) {
+    return new Response(JSON.stringify({ error: 'Non authentifié' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const userId = session.user.sub;
+  const { id } = await params;
+
+  try {
+    // Supprimer la critique existante
+    const deleteCommand = new DeleteCommand({
+      TableName: "AlbumReviews",
+      Key: {
+        albumId: id,
+        userId: userId
+      }
+    });
+
+    await docClient.send(deleteCommand);
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Erreur lors de la suppression de la critique:', error);
+    return new Response(JSON.stringify({ error: 'Échec de la suppression de la critique' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
