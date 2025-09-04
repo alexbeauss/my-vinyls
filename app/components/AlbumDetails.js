@@ -43,7 +43,7 @@ export default function AlbumDetails({ albumId }) {
             setRating(data.rating);
           }
         }
-      } catch (err) {
+      } catch {
         // Silencieux - pas de critique existante
         console.log('Aucune critique existante trouvée');
       }
