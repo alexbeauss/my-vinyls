@@ -70,17 +70,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     updateAlbumData
   }));
 
-  useEffect(() => {
-    fetchDiscogsData();
-  }, []);
-
-  useEffect(() => {
-    if (discogsCollection.length > 0) {
-      fetchAlbumRatings();
-      fetchStoredValues();
-    }
-  }, [discogsCollection, fetchAlbumRatings, fetchStoredValues]);
-
   const fetchDiscogsData = async () => {
     setIsLoading(true);
     try {
@@ -100,7 +89,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
 
       // Gestion des albums aléatoires
       const today = new Date().toISOString().split('T')[0];
-      const storedAlbums = JSON.parse(localStorage.getItem('randomAlbums'));
+      const storedAlbums = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('randomAlbums') || 'null') : null;
 
       if (storedAlbums && storedAlbums.date === today) {
         setRandomAlbum(storedAlbums.albums);
@@ -115,7 +104,9 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
           }
         }
         setRandomAlbum(randomAlbums);
-        localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -190,6 +181,19 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       console.error('Erreur lors de la récupération des valeurs stockées:', error);
     }
   }, [discogsCollection]);
+
+  // useEffect pour charger les données initiales
+  useEffect(() => {
+    fetchDiscogsData();
+  }, []);
+
+  // useEffect pour charger les notes et valeurs quand la collection change
+  useEffect(() => {
+    if (discogsCollection.length > 0) {
+      fetchAlbumRatings();
+      fetchStoredValues();
+    }
+  }, [discogsCollection, fetchAlbumRatings, fetchStoredValues]);
 
   const fetchAlbumValues = async (forceUpdate = false) => {
     if (isLoadingValues) return; // Éviter les appels multiples

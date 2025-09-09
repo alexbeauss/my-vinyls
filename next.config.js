@@ -2,6 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   staticPageGenerationTimeout: 1000,
+  swcMinify: true,
+  experimental: {
+    esmExternals: 'loose',
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
   async headers() {
     return [
       {

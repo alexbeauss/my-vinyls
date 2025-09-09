@@ -7,9 +7,13 @@ export default function Scanner() {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    import("@ericblade/quagga2").then((quaggaModule) => {
-      setQuagga(quaggaModule.default);
-    });
+    if (typeof window !== 'undefined') {
+      import("@ericblade/quagga2").then((quaggaModule) => {
+        setQuagga(quaggaModule.default);
+      }).catch((error) => {
+        console.error('Erreur lors du chargement de Quagga:', error);
+      });
+    }
   }, []);
 
   useEffect(() => {
