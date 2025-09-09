@@ -22,18 +22,22 @@ Cette erreur est causée par des problèmes de hoisting JavaScript lors du build
 
 ### Actions à effectuer pour le déploiement
 
-#### 1. **Mise à jour de Node.js**
+#### 1. **Configuration Vercel corrigée**
 ```bash
-# Vérifier la version actuelle
-node --version
-
-# Mettre à jour vers Node.js 18.18.0 ou supérieur
-# Sur Vercel, configurer dans vercel.json :
+# Fichier vercel.json simplifié (sans runtime spécifique)
 {
-  "functions": {
-    "app/api/**/*.js": {
-      "runtime": "nodejs18.x"
-    }
+  "framework": "nextjs",
+  "regions": ["cdg1"]
+}
+
+# Fichier .nvmrc pour spécifier la version Node.js
+18.18.0
+
+# Fichier package.json avec engines
+{
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
   }
 }
 ```
@@ -58,12 +62,23 @@ node scripts/check-build-issues.js
 
 #### 4. **Déploiement sur Vercel**
 ```bash
-# Déployer avec les bonnes configurations
+# Option 1: Déploiement manuel
 vercel --prod
+
+# Option 2: Utiliser le script de déploiement
+node scripts/deploy-vercel.js
 
 # Vérifier les logs de déploiement
 vercel logs
 ```
+
+#### 5. **Résolution de l'erreur "Function Runtimes must have a valid version"**
+Cette erreur est causée par une configuration incorrecte du runtime dans vercel.json.
+
+**Solution appliquée :**
+- Supprimé la configuration `functions` avec runtime spécifique
+- Utilisé une configuration simplifiée avec seulement `framework` et `regions`
+- Ajouté `.nvmrc` et `engines` dans package.json pour spécifier la version Node.js
 
 ### Problèmes résolus
 

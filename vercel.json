@@ -1,14 +1,4 @@
 {
-  "functions": {
-    "app/api/**/*": {
-      "runtime": "nodejs18.x"
-    }
-  },
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["cdg1"],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "regions": ["cdg1"]
 }
