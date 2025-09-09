@@ -1,11 +1,13 @@
 import { getSession } from '@auth0/nextjs-auth0';
+import { cookies } from 'next/headers';
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../lib/awsConfig';
 import Discogs from 'disconnect';
 import axios from 'axios';
 
 export async function GET() {
-  const session = await getSession();
+  const cookieStore = await cookies();
+  const session = await getSession({ cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authentifié' }), {
       status: 401,
@@ -69,6 +71,25 @@ export async function GET() {
 
   } catch (error) {
     console.error('Erreur lors de la récupération des données Discogs:', error);
+    
+    // Gestion spécifique des erreurs Discogs
+    if (error.status === 429) {
+      return new Response(JSON.stringify({ error: 'Trop de requêtes vers l\'API Discogs. Veuillez réessayer plus tard.' }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } else if (error.status === 401) {
+      return new Response(JSON.stringify({ error: 'Token Discogs invalide' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } else if (error.status === 403) {
+      return new Response(JSON.stringify({ error: 'Accès refusé à l\'API Discogs' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    
     return new Response(JSON.stringify({ error: 'Échec de la récupération des données Discogs' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

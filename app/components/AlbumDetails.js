@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 
-export default function AlbumDetails({ albumId }) {
+export default function AlbumDetails({ albumId, onDataUpdate }) {
   const [album, setAlbum] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -10,6 +10,14 @@ export default function AlbumDetails({ albumId }) {
   const [rating, setRating] = useState(null);
   const [isGeneratingReview, setIsGeneratingReview] = useState(false);
   const [reviewError, setReviewError] = useState(null);
+  const [estimatedValue, setEstimatedValue] = useState(null);
+  const [valueSource, setValueSource] = useState(null); // 'saved' ou 'discogs'
+
+  const handleDataUpdate = useCallback((id) => {
+    if (onDataUpdate) {
+      onDataUpdate(id);
+    }
+  }, [onDataUpdate]);
 
   useEffect(() => {
     async function fetchAlbumDetails() {
@@ -21,6 +29,35 @@ export default function AlbumDetails({ albumId }) {
         }
         const data = await response.json();
         setAlbum(data);
+        
+        // D'abord essayer de récupérer la valeur stockée en base de données
+        try {
+          const valueResponse = await fetch(`/api/album/${albumId}/value`);
+          if (valueResponse.ok) {
+            const valueData = await valueResponse.json();
+            if (valueData.estimatedValue) {
+              setEstimatedValue(valueData.estimatedValue);
+              setValueSource('saved');
+            }
+          }
+        } catch {
+          // Silencieux - pas de valeur stockée
+        }
+
+        // Si pas de valeur stockée, utiliser celle de Discogs
+        if (!estimatedValue) {
+          if (data.estimated_value) {
+            setEstimatedValue(data.estimated_value);
+            setValueSource('discogs');
+            // Déclencher la mise à jour de la collection
+            handleDataUpdate(albumId);
+          } else if (data.lowest_price) {
+            setEstimatedValue(data.lowest_price);
+            setValueSource('discogs');
+            // Déclencher la mise à jour de la collection
+            handleDataUpdate(albumId);
+          }
+        }
       } catch (err) {
         setError(err.message);
       } finally {
@@ -42,6 +79,8 @@ export default function AlbumDetails({ albumId }) {
           if (data.review) {
             setReview(data.review);
             setRating(data.rating);
+            // Déclencher la mise à jour de la collection
+            handleDataUpdate(albumId);
           }
         }
       } catch {
@@ -54,7 +93,7 @@ export default function AlbumDetails({ albumId }) {
       fetchAlbumDetails();
       fetchExistingReview();
     }
-  }, [albumId]);
+  }, [albumId, handleDataUpdate]);
 
   const generateReview = async () => {
     setIsGeneratingReview(true);
@@ -68,13 +107,24 @@ export default function AlbumDetails({ albumId }) {
       });
       
       if (!response.ok) {
-        throw new Error('Erreur lors de la génération de la critique');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || `Erreur ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
+      
+      if (!data.review) {
+        throw new Error('Aucune critique générée par l\'IA');
+      }
+      
       setReview(data.review);
       setRating(data.rating);
+      
+      // Déclencher la mise à jour de la collection
+      handleDataUpdate(albumId);
     } catch (err) {
+      console.error('Erreur lors de la génération de critique:', err);
       setReviewError(err.message);
     } finally {
       setIsGeneratingReview(false);
@@ -152,6 +202,26 @@ export default function AlbumDetails({ albumId }) {
                 </div>
               </div>
               
+               {/* Valeur estimée */}
+               {estimatedValue && (
+                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                   <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 flex items-center justify-between">
+                     <span>Valeur estimée</span>
+                     {valueSource === 'saved' && (
+                       <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-1 rounded-full flex items-center">
+                         <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                         </svg>
+                         Sauvegardée
+                       </span>
+                     )}
+                   </div>
+                   <div className="text-lg font-bold text-gray-900 dark:text-white">
+                     {typeof estimatedValue === 'number' ? `${estimatedValue.toFixed(2)} €` : estimatedValue}
+                   </div>
+                 </div>
+               )}
+              
               {/* Note IA */}
               {rating && (
                 <div className={`rounded-lg p-4 border border-gray-200 dark:border-gray-700 ${getRatingBgColor(rating)}`}>
@@ -169,6 +239,8 @@ export default function AlbumDetails({ albumId }) {
                   </div>
                 </div>
               )}
+              
+              
             </div>
             
             {/* Genres et styles */}

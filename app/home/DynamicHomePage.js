@@ -1,7 +1,7 @@
 "use client";
 import { useUser } from '@auth0/nextjs-auth0/client';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import ClientHome from './ClientHome';
 import DynamicProfilePage from '../components/DynamicProfilePage';
 import AlbumDetails from '../components/AlbumDetails';
@@ -13,6 +13,7 @@ export default function DynamicHomePage() {
   const [showProfile, setShowProfile] = useState(false);
   const [selectedAlbumId, setSelectedAlbumId] = useState(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const clientHomeRef = useRef(null);
 
   // Debug logs
   useEffect(() => {
@@ -54,6 +55,12 @@ export default function DynamicHomePage() {
     setSelectedAlbumId(null);
   };
 
+  const handleAlbumDataUpdate = (albumId) => {
+    if (clientHomeRef.current) {
+      clientHomeRef.current.updateAlbumData(albumId);
+    }
+  };
+
   return (
     <div className={`min-h-screen bg-gray-100 dark:bg-gray-900 ${(showProfile || selectedAlbumId || isSearchOpen) ? 'overflow-hidden' : ''}`}>
       <Navbar 
@@ -64,7 +71,7 @@ export default function DynamicHomePage() {
       
       <main className={`w-full max-w-7xl mx-auto px-4 py-8 transition-all duration-300 ${(showProfile || selectedAlbumId || isSearchOpen) ? 'blur-sm' : ''}`}>
         {/* Collection toujours affichée */}
-        <ClientHome user={user} onAlbumClick={handleAlbumClick} />
+        <ClientHome ref={clientHomeRef} user={user} onAlbumClick={handleAlbumClick} />
       </main>
       
       {/* Overlay pour empêcher les clics sur la collection quand une modale est ouverte */}
@@ -101,7 +108,7 @@ export default function DynamicHomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <AlbumDetails albumId={selectedAlbumId} />
+            <AlbumDetails albumId={selectedAlbumId} onDataUpdate={handleAlbumDataUpdate} />
           </div>
         </div>
       )}

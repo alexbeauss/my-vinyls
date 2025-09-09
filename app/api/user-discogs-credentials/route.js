@@ -1,11 +1,13 @@
 import { getSession } from '@auth0/nextjs-auth0';
+import { cookies } from 'next/headers';
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../lib/dynamoDbClient';
 
 //export const runtime = 'edge'; // Ajoutez cette ligne
 
 export async function GET() {
-  const session = await getSession();
+  const cookieStore = await cookies();
+  const session = await getSession({ cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
       status: 401,
@@ -48,7 +50,8 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const session = await getSession();
+  const cookieStore = await cookies();
+  const session = await getSession({ cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authenticated' }), {
       status: 401,

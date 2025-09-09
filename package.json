@@ -54,6 +54,6 @@
     "path": false
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=18.18.0"
   }
 }

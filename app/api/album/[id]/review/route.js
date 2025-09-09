@@ -1,11 +1,73 @@
 import { getSession } from '@auth0/nextjs-auth0';
+import { cookies } from 'next/headers';
 import { GetCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../../../lib/awsConfig';
 import Discogs from 'disconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export async function GET(req, { params }) {
+  const cookieStore = await cookies();
+  const session = await getSession(req, { cookies: cookieStore });
+  if (!session || !session.user) {
+    return new Response(JSON.stringify({ error: 'Non authentifié' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const userId = session.user.sub;
+  const { id } = await params;
+
+  try {
+    // Vérifier si une critique existe déjà pour cet album et cet utilisateur
+    const getReviewCommand = new GetCommand({
+      TableName: "AlbumReviews",
+      Key: { 
+        albumId: id,
+        userId: userId 
+      },
+    });
+
+    const existingReviewResponse = await docClient.send(getReviewCommand);
+
+    if (existingReviewResponse.Item) {
+      return new Response(JSON.stringify({ 
+        review: existingReviewResponse.Item.review,
+        rating: existingReviewResponse.Item.rating,
+        albumInfo: {
+          title: existingReviewResponse.Item.albumTitle,
+          artists: [existingReviewResponse.Item.albumArtist],
+          year: existingReviewResponse.Item.albumYear,
+          genres: existingReviewResponse.Item.genres || [],
+          styles: existingReviewResponse.Item.styles || []
+        }
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } else {
+      return new Response(JSON.stringify({ 
+        review: null,
+        rating: null,
+        albumInfo: null
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la critique:', error);
+    return new Response(JSON.stringify({ error: 'Échec de la récupération de la critique' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
 export async function POST(req, { params }) {
-  const session = await getSession(req);
+  const cookieStore = await cookies();
+  const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
@@ -64,54 +126,128 @@ export async function POST(req, { params }) {
 
     // Récupérer les détails de l'album depuis Discogs
     const dis = new Discogs.Client({ userToken: discogsToken });
-    const albumDetails = await dis.database().getRelease(id);
+    let albumDetails;
+    
+    try {
+      albumDetails = await dis.database().getRelease(id);
+      console.log(`Détails de l'album récupérés pour ${id}:`, {
+        title: albumDetails.title,
+        artists: albumDetails.artists?.length || 0,
+        year: albumDetails.year,
+        genres: albumDetails.genres?.length || 0,
+        styles: albumDetails.styles?.length || 0,
+        tracklist: albumDetails.tracklist?.length || 0
+      });
+    } catch (discogsError) {
+      console.error('Erreur Discogs lors de la récupération de l\'album:', discogsError);
+      throw discogsError;
+    }
+
+    // Validation des données essentielles
+    if (!albumDetails.title) {
+      throw new Error('Titre de l\'album manquant');
+    }
+    if (!albumDetails.artists || albumDetails.artists.length === 0) {
+      throw new Error('Informations artiste manquantes');
+    }
 
     // Initialiser Google Gemini
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Créer le prompt pour la critique
-    const prompt = `Tu es un critique musical expert. Tu as travaillé pour pitchfork, rolling stone, new yorker et d'autres magazines pointus. Écris une critique détaillée et exigeante de l'album suivant en français :
+    // Créer le prompt pour la critique avec gestion des données manquantes
+    const safeGetValue = (value, fallback = 'Non spécifié') => {
+      if (!value || (Array.isArray(value) && value.length === 0)) {
+        return fallback;
+      }
+      if (Array.isArray(value)) {
+        return value.map(item => item.name || item.title || item).join(', ');
+      }
+      return value;
+    };
+
+    const prompt = `Tu es un critique musical expérimenté et exigeant. Tu as travaillé pour pitchfork, rolling stone, new yorker et d'autres magazines pointus. Tu es connu pour tes analyses nuancées et ton refus de la complaisance facile. Écris une critique détaillée et originale de l'album suivant en français :
 
 Titre: ${albumDetails.title}
-Artiste(s): ${albumDetails.artists.map(artist => artist.name).join(', ')}
-Année: ${albumDetails.year}
-Genre(s): ${albumDetails.genres ? albumDetails.genres.join(', ') : 'Non spécifié'}
-Style(s): ${albumDetails.styles ? albumDetails.styles.join(', ') : 'Non spécifié'}
-Label: ${albumDetails.labels ? albumDetails.labels.map(label => label.name).join(', ') : 'Non spécifié'}
-Tracklist: ${albumDetails.tracklist ? albumDetails.tracklist.map(track => `${track.title} (${track.duration || 'Durée inconnue'})`).join(', ') : 'Non disponible'}
+Artiste(s): ${safeGetValue(albumDetails.artists)}
+Année: ${albumDetails.year || 'Non spécifiée'}
+Genre(s): ${safeGetValue(albumDetails.genres)}
+Style(s): ${safeGetValue(albumDetails.styles)}
+Label: ${safeGetValue(albumDetails.labels)}
+Tracklist: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ? 
+  albumDetails.tracklist.slice(0, 10).map(track => `${track.title} (${track.duration || 'Durée inconnue'})`).join(', ') + 
+  (albumDetails.tracklist.length > 10 ? `... et ${albumDetails.tracklist.length - 10} autres titres` : '') 
+  : 'Non disponible'}
 
 Écris une critique de 150-200 mots qui couvre :
 1. L'intention et la vision de l'album
-2. L'analyse musicale et stylistique
+2. L'analyse musicale et stylistique (points forts et faiblesses)
 3. L'influence et l'impact de l'album
 4. Une conclusion avec une note sur 10 avec une décimale.
 
-IMPORTANT : Varie ton style d'écriture à chaque critique. Utilise différents angles d'approche :
-- Commence parfois par une observation technique, parfois par le contexte historique, parfois par une métaphore
-- JAMAIS de négation au début : n'utilise JAMAIS de phrases qui commencent par "n'est pas", "ce n'est pas", "ne se contente pas de", "va au-delà de", "transcende", "dépasse", "ne se limite pas à", "ne se résume pas à", "n'est pas qu'un simple", "n'est pas une simple", "n'est pas qu'une simple"
+CRITÈRES D'ÉVALUATION ÉQUILIBRÉS :
+- 9-10/10 : Chef-d'œuvre exceptionnel, marquant, quasi-parfait
+- 7-8/10 : Très bon album avec quelques imperfections mineures
+- 5-6/10 : Album correct mais sans éclat particulier, avec des faiblesses
+- 3-4/10 : Album décevant, avec des problèmes notables
+- 1-2/10 : Album raté, peu d'intérêt
+- 0/10 : Échec complet
+
+INSTRUCTIONS POUR UNE CRITIQUE NUANCÉE :
+- Sois honnête et équilibré : reconnais les qualités ET les défauts
+- Pointe les faiblesses quand elles existent, mais de manière constructive
+- Compare avec les standards du genre et les références pertinentes
+- Sois sans complaisance sur les vrais problèmes (textes faibles, arrangements prévisibles, performances médiocres)
+- Reconnais les réussites quand elles sont méritées
+- Varie ton style d'écriture à chaque critique
 - Commence TOUJOURS par dire ce que l'album EST, pas ce qu'il n'est pas
-- Évite absolument les formules génériques comme "ce n'est pas simplement un album", "n'est pas une simple consolidation", "ce n'est pas une simple collection de chansons", "ce n'est pas qu'un simple", "ne se contente pas de", "va au-delà de", "transcende le simple", "dépasse la simple", "n'est pas qu'une simple", "ne se limite pas à", "ne se résume pas à"
 - Utilise un vocabulaire riche et varié
 - Sois direct et évite les périphrases
-- Adopte un ton professionnel mais accessible, sans emphase excessive
-- Chaque critique doit avoir sa propre personnalité et son propre rythme`;
+- Adopte un ton professionnel et nuancé
+- Chaque critique doit avoir sa propre personnalité et son propre rythme
+
+IMPORTANT : Termine ta critique par "Note : X.X/10" où X.X est ta note avec une décimale.`;
 
     // Générer la critique avec Gemini
-    const result = await model.generateContent(prompt);
-    const review = result.response.text();
-
-    // Extraire la note de la critique
-    const ratingMatch = review.match(/(\d+(?:\.\d+)?)\/10|(\d+(?:\.\d+)?)\s*\/\s*10|note[:\s]*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*\/\s*10|(\d+(?:\.\d+)?)\s*sur\s*10/i);
-    let rating = null;
+    let result, review, rating;
     
-    if (ratingMatch) {
-      // Prendre le premier groupe qui contient un nombre
-      rating = parseFloat(ratingMatch[1] || ratingMatch[2] || ratingMatch[3] || ratingMatch[4] || ratingMatch[5]);
-      // S'assurer que la note est entre 0 et 10
-      if (rating < 0) rating = 0;
-      if (rating > 10) rating = 10;
+    try {
+      result = await model.generateContent(prompt);
+      review = result.response.text();
+      console.log(`Critique générée pour ${id}, longueur: ${review.length} caractères`);
+    } catch (geminiError) {
+      console.error('Erreur Gemini:', geminiError);
+      throw new Error(`Erreur lors de la génération avec Gemini: ${geminiError.message}`);
     }
+
+    // Extraire la note de la critique avec plusieurs patterns
+    const ratingPatterns = [
+      /note[:\s]*(\d+(?:\.\d+)?)\/10/i,
+      /(\d+(?:\.\d+)?)\/10/i,
+      /(\d+(?:\.\d+)?)\s*\/\s*10/i,
+      /(\d+(?:\.\d+)?)\s*sur\s*10/i,
+      /note[:\s]*(\d+(?:\.\d+)?)/i,
+      /(\d+(?:\.\d+)?)\s*\/\s*10/i
+    ];
+    
+    rating = null;
+    for (const pattern of ratingPatterns) {
+      const match = review.match(pattern);
+      if (match) {
+        rating = parseFloat(match[1]);
+        if (rating >= 0 && rating <= 10) {
+          break;
+        }
+      }
+    }
+    
+    // Si aucune note n'est trouvée, essayer de la générer à partir du contexte
+    if (rating === null) {
+      console.warn(`Aucune note trouvée dans la critique pour ${id}, tentative de génération de note par défaut`);
+      rating = 5.0; // Note par défaut si aucune n'est trouvée
+    }
+    
+    console.log(`Note extraite pour ${id}: ${rating}`);
 
     // Sauvegarder la critique en base de données DynamoDB
     const putReviewCommand = new PutCommand({
@@ -150,15 +286,50 @@ IMPORTANT : Varie ton style d'écriture à chaque critique. Utilise différents 
 
   } catch (error) {
     console.error('Erreur lors de la génération de la critique:', error);
-    return new Response(JSON.stringify({ error: 'Échec de la génération de la critique' }), {
-      status: 500,
+    console.error('Détails de l\'erreur:', {
+      message: error.message,
+      stack: error.stack,
+      albumId: id,
+      userId: userId
+    });
+    
+    // Gestion spécifique des erreurs
+    let errorMessage = 'Échec de la génération de la critique';
+    let statusCode = 500;
+    
+    if (error.message && error.message.includes('API key')) {
+      errorMessage = 'Clé API Google Gemini manquante ou invalide';
+      statusCode = 503;
+    } else if (error.message && error.message.includes('quota')) {
+      errorMessage = 'Quota Google Gemini dépassé. Veuillez réessayer plus tard.';
+      statusCode = 429;
+    } else if (error.message && error.message.includes('network')) {
+      errorMessage = 'Erreur de connexion. Veuillez réessayer.';
+      statusCode = 503;
+    } else if (error.status === 404) {
+      errorMessage = 'Album non trouvé dans Discogs';
+      statusCode = 404;
+    } else if (error.status === 429) {
+      errorMessage = 'Trop de requêtes vers l\'API Discogs. Veuillez réessayer plus tard.';
+      statusCode = 429;
+    } else if (error.status === 401) {
+      errorMessage = 'Token Discogs invalide';
+      statusCode = 401;
+    }
+    
+    return new Response(JSON.stringify({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }), {
+      status: statusCode,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 }
 
 export async function DELETE(req, { params }) {
-  const session = await getSession(req);
+  const cookieStore = await cookies();
+  const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,

@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import Image from 'next/image';
 
-export default function ClientHome({ onAlbumClick }) {
+const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [discogsCollection, setDiscogsCollection] = useState([]);
   const [collectionValue, setCollectionValue] = useState(null);
   const [randomAlbum, setRandomAlbum] = useState([]);
@@ -13,10 +13,73 @@ export default function ClientHome({ onAlbumClick }) {
   const [genreFilters, setGenreFilters] = useState([]);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [showGenreFilters, setShowGenreFilters] = useState(false);
+  const [albumRatings, setAlbumRatings] = useState({});
+  const [albumValues, setAlbumValues] = useState({});
+  const [valueError, setValueError] = useState(null);
+  const [isLoadingValues, setIsLoadingValues] = useState(false);
+  const [valuesEnabled, setValuesEnabled] = useState(false);
+  const [valuesProgress, setValuesProgress] = useState({ current: 0, total: 0 });
+  const [lastValuesUpdate, setLastValuesUpdate] = useState(null);
+
+  // Fonction pour mettre à jour les données d'un album spécifique
+  const updateAlbumData = async (albumId) => {
+    try {
+      // Mettre à jour la note si elle existe
+      const reviewResponse = await fetch(`/api/album/${albumId}/review`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (reviewResponse.ok) {
+        const reviewData = await reviewResponse.json();
+        if (reviewData.rating && reviewData.rating > 0) {
+          setAlbumRatings(prev => ({
+            ...prev,
+            [albumId]: reviewData.rating
+          }));
+        }
+      }
+
+      // Mettre à jour la valeur si elle existe
+      const valueResponse = await fetch(`/api/album/${albumId}/value`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (valueResponse.ok) {
+        const valueData = await valueResponse.json();
+        if (valueData.estimatedValue) {
+          setAlbumValues(prev => ({
+            ...prev,
+            [albumId]: valueData.estimatedValue
+          }));
+          setValuesEnabled(true);
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des données de l\'album:', error);
+    }
+  };
+
+  // Exposer la fonction via useImperativeHandle
+  useImperativeHandle(ref, () => ({
+    updateAlbumData
+  }));
 
   useEffect(() => {
     fetchDiscogsData();
   }, []);
+
+  useEffect(() => {
+    if (discogsCollection.length > 0) {
+      fetchAlbumRatings();
+      fetchStoredValues();
+    }
+  }, [discogsCollection, fetchAlbumRatings, fetchStoredValues]);
 
   const fetchDiscogsData = async () => {
     setIsLoading(true);
@@ -60,6 +123,167 @@ export default function ClientHome({ onAlbumClick }) {
       setIsLoading(false);
     }
   };
+
+  const fetchAlbumRatings = useCallback(async () => {
+    try {
+      const ratings = {};
+      console.log(`Récupération des notes existantes pour ${discogsCollection.length} albums...`);
+      
+      for (const release of discogsCollection) {
+        try {
+          const response = await fetch(`/api/album/${release.id}/review`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.rating && data.rating > 0) {
+              ratings[release.id] = data.rating;
+              console.log(`Note trouvée: ${data.rating}/10 pour ${release.basic_information.title}`);
+            }
+          }
+        } catch {
+          // Silencieux - pas de critique pour cet album
+        }
+      }
+      setAlbumRatings(ratings);
+      console.log(`Notes récupérées: ${Object.keys(ratings).length} albums avec des critiques`);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des notes:', error);
+    }
+  }, [discogsCollection]);
+
+  const fetchStoredValues = useCallback(async () => {
+    try {
+      const values = {};
+      console.log(`Récupération des valeurs stockées pour ${discogsCollection.length} albums...`);
+      
+      for (const release of discogsCollection) {
+        try {
+          const response = await fetch(`/api/album/${release.id}/value`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.estimatedValue) {
+              values[release.id] = data.estimatedValue;
+              console.log(`Valeur trouvée: ${data.estimatedValue} € pour ${release.basic_information.title}`);
+            }
+          }
+        } catch {
+          // Silencieux - pas de valeur pour cet album
+        }
+      }
+      setAlbumValues(values);
+      if (Object.keys(values).length > 0) {
+        setValuesEnabled(true);
+      }
+      console.log(`Valeurs stockées récupérées: ${Object.keys(values).length} albums avec des valeurs`);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des valeurs stockées:', error);
+    }
+  }, [discogsCollection]);
+
+  const fetchAlbumValues = async (forceUpdate = false) => {
+    if (isLoadingValues) return; // Éviter les appels multiples
+    
+    try {
+      setIsLoadingValues(true);
+      setValueError(null);
+      const values = {...albumValues}; // Commencer avec les valeurs existantes
+      
+      // Récupérer les valeurs pour tous les albums de la collection
+      const action = forceUpdate ? 'mise à jour' : 'récupération et sauvegarde';
+      console.log(`${action} des valeurs pour ${discogsCollection.length} albums...`);
+      setValuesProgress({ current: 0, total: discogsCollection.length });
+      
+      for (let i = 0; i < discogsCollection.length; i++) {
+        const release = discogsCollection[i];
+        
+        // Si on ne force pas la mise à jour et qu'on a déjà une valeur, on peut la garder
+        if (!forceUpdate && values[release.id]) {
+          console.log(`Valeur existante conservée: ${values[release.id]} € pour ${release.basic_information.title}`);
+          setValuesProgress({ current: i + 1, total: discogsCollection.length });
+          continue;
+        }
+        
+        try {
+          // Utiliser la nouvelle API qui sauvegarde automatiquement
+          const response = await fetch(`/api/album/${release.id}/value`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (response.ok) {
+            try {
+              const data = await response.json();
+              if (data.estimatedValue) {
+                values[release.id] = data.estimatedValue;
+                console.log(`Valeur ${forceUpdate ? 'mise à jour' : 'sauvegardée'}: ${data.estimatedValue} € pour ${release.basic_information.title}`);
+              }
+            } catch (jsonError) {
+              console.warn(`Réponse JSON invalide pour l'album ${release.id}:`, jsonError.message);
+              // Continuer avec l'album suivant
+            }
+          } else if (response.status === 429) {
+            setValueError('Trop de requêtes vers l\'API Discogs. Récupération des valeurs en pause...');
+            // Pause plus longue en cas de rate limiting
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            i--; // Réessayer le même album
+            continue;
+          } else if (response.status === 401) {
+            setValueError('Token Discogs invalide. Veuillez reconfigurer vos identifiants.');
+            break;
+          } else if (response.status === 502) {
+            setValueError('Réponse invalide de l\'API Discogs. Pause de 10 secondes...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            i--; // Réessayer le même album
+            continue;
+          } else if (response.status >= 500) {
+            setValueError('Erreur serveur Discogs. Pause de 5 secondes...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            i--; // Réessayer le même album
+            continue;
+          }
+        } catch (error) {
+          console.warn(`Erreur lors de la récupération de la valeur pour l'album ${release.id}:`, error.message);
+        }
+        
+        // Pause entre chaque requête pour éviter le rate limiting
+        if (i < discogsCollection.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Pause plus courte pour accélérer
+        }
+        
+        // Mettre à jour l'état progressivement toutes les 10 requêtes
+        if (i % 10 === 0) {
+          setAlbumValues({...values});
+        }
+        
+        // Mettre à jour la progression
+        setValuesProgress({ current: i + 1, total: discogsCollection.length });
+      }
+      
+      setAlbumValues(values);
+      setValuesEnabled(true);
+      setLastValuesUpdate(new Date().toLocaleString('fr-FR'));
+      console.log(`Valeurs ${forceUpdate ? 'mises à jour' : 'récupérées et sauvegardées'}: ${Object.keys(values).length} albums avec des valeurs`);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des valeurs:', error);
+      setValueError('Erreur lors de la récupération des valeurs des albums');
+    } finally {
+      setIsLoadingValues(false);
+    }
+  };
+
 
   const handleSort = (newSortBy) => {
     if (sortBy === newSortBy) {
@@ -109,6 +333,28 @@ export default function ClientHome({ onAlbumClick }) {
           const yearA = a.basic_information.year || 0;
           const yearB = b.basic_information.year || 0;
           return sortOrder === 'asc' ? yearA - yearB : yearB - yearA;
+        } else if (sortBy === 'rating') {
+          const ratingA = albumRatings[a.id];
+          const ratingB = albumRatings[b.id];
+          
+          // Si un album n'a pas de note, il va à la fin
+          if (!ratingA && !ratingB) return 0; // Les deux sans note, ordre inchangé
+          if (!ratingA) return 1; // A sans note, va après B
+          if (!ratingB) return -1; // B sans note, va après A
+          
+          // Les deux ont une note, tri normal
+          return sortOrder === 'asc' ? ratingA - ratingB : ratingB - ratingA;
+        } else if (sortBy === 'value') {
+          const valueA = albumValues[a.id];
+          const valueB = albumValues[b.id];
+          
+          // Si un album n'a pas de valeur, il va à la fin
+          if (!valueA && !valueB) return 0; // Les deux sans valeur, ordre inchangé
+          if (!valueA) return 1; // A sans valeur, va après B
+          if (!valueB) return -1; // B sans valeur, va après A
+          
+          // Les deux ont une valeur, tri normal
+          return sortOrder === 'asc' ? valueA - valueB : valueB - valueA;
         }
         return 0;
       }) : [];
@@ -152,6 +398,53 @@ export default function ClientHome({ onAlbumClick }) {
                 <p className="dark:text-gray-300 text-sm md:text-base">{randomAlbum[carouselIndex].basic_information.artists[0].name}</p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
+                
+                {/* Note et valeur dans le carrousel */}
+                <div className="flex items-center gap-4 mt-2">
+                  {/* Note */}
+                  {albumRatings[randomAlbum[carouselIndex].id] ? (
+                    <div className="flex items-center">
+                      <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                        {albumRatings[randomAlbum[carouselIndex].id].toFixed(1)}/10
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      <svg className="w-4 h-4 text-gray-400 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Pas de note
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Valeur */}
+                  {valuesEnabled && (
+                    albumValues[randomAlbum[carouselIndex].id] ? (
+                      <div className="flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                          {typeof albumValues[randomAlbum[carouselIndex].id] === 'number' ? `${albumValues[randomAlbum[carouselIndex].id].toFixed(2)} €` : albumValues[randomAlbum[carouselIndex].id]}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <svg className="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          Pas de valeur
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </div>
             <button onClick={handleNext} className="text-lg font-bold dark:text-white">
@@ -165,6 +458,38 @@ export default function ClientHome({ onAlbumClick }) {
 
       {isLoading && <p className="dark:text-white">Chargement de votre collection...</p>}
       {error && <p className="text-red-500 dark:text-red-400">Erreur : {error}</p>}
+      {valueError && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span>{valueError}</span>
+          </div>
+          <button
+            onClick={() => setValueError(null)}
+            className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200 ml-4"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {isLoadingValues && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 px-4 py-3 rounded-lg mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium">Récupération des valeurs en cours...</span>
+            <span className="text-sm">{valuesProgress.current}/{valuesProgress.total}</span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(valuesProgress.current / valuesProgress.total) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
       {discogsCollection.length > 0 && (
         <div>
           <h1 className="text-3xl font-bold mt-8 mb-4 dark:text-white">Ma collection</h1>
@@ -188,7 +513,7 @@ export default function ClientHome({ onAlbumClick }) {
             </div>
           </div>
           {/* Déplacer les boutons de tri ici */}
-          <div className="flex mb-4 gap-2">
+          <div className="flex mb-4 gap-2 flex-wrap">
             <button 
               onClick={() => handleSort('artist')} 
               className={`px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
@@ -201,6 +526,33 @@ export default function ClientHome({ onAlbumClick }) {
             >
               Trier par année {sortBy === 'year' && (sortOrder === 'asc' ? '↑' : '↓')}
             </button>
+            <button 
+              onClick={() => handleSort('rating')} 
+              className={`px-3 py-1 rounded ${sortBy === 'rating' ? 'bg-purple-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
+            >
+              Trier par note {sortBy === 'rating' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button 
+              onClick={() => handleSort('value')} 
+              disabled={!valuesEnabled}
+              className={`px-3 py-1 rounded ${sortBy === 'value' ? 'bg-green-500 text-white' : valuesEnabled ? 'bg-gray-200 dark:bg-gray-700 dark:text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'}`}
+            >
+              Trier par valeur {sortBy === 'value' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => fetchAlbumValues(valuesEnabled)}
+                disabled={isLoadingValues}
+                className="px-3 py-1 rounded bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white disabled:cursor-not-allowed"
+              >
+                {isLoadingValues ? `Récupération... (${valuesProgress.current}/${valuesProgress.total})` : valuesEnabled ? 'Mettre à jour les valeurs' : 'Récupérer les valeurs'}
+              </button>
+              {lastValuesUpdate && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Dernière mise à jour: {lastValuesUpdate}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setShowGenreFilters(!showGenreFilters)}
               className={`px-3 py-1 rounded ${showGenreFilters ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
@@ -254,6 +606,46 @@ export default function ClientHome({ onAlbumClick }) {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                     Genre : {release.basic_information.styles.join(', ') || 'N/A'}
                   </p>
+                  {albumRatings[release.id] ? (
+                    <div className="mt-2 flex items-center">
+                      <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                        {albumRatings[release.id].toFixed(1)}/10
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-center">
+                      <svg className="w-4 h-4 text-gray-400 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                        Pas de note
+                      </span>
+                    </div>
+                  )}
+                  {valuesEnabled && (
+                    albumValues[release.id] ? (
+                      <div className="mt-1 flex items-center">
+                        <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                          {typeof albumValues[release.id] === 'number' ? `${albumValues[release.id].toFixed(2)} €` : albumValues[release.id]}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-1 flex items-center">
+                        <svg className="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          Pas de valeur
+                        </span>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             ))}
@@ -262,4 +654,6 @@ export default function ClientHome({ onAlbumClick }) {
       )}
     </div>
   );
-}
+});
+
+export default ClientHome;
