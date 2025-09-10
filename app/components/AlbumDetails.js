@@ -95,20 +95,36 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
     }
   }, [albumId, handleDataUpdate]);
 
-  const generateReview = async () => {
+  const generateReview = async (retryCount = 0) => {
     setIsGeneratingReview(true);
     setReviewError(null);
+    
+    const maxRetries = 2;
+    const timeoutMs = 45000; // 45 secondes pour laisser une marge
+    
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
       const response = await fetch(`/api/album/${albumId}/review`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || `Erreur ${response.status}: ${response.statusText}`;
+        let errorMessage = errorData.error || `Erreur ${response.status}: ${response.statusText}`;
+        
+        // Gestion spécifique des erreurs 504
+        if (response.status === 504) {
+          errorMessage = 'La génération de la critique prend trop de temps. Veuillez réessayer.';
+        }
+        
         throw new Error(errorMessage);
       }
       
@@ -125,7 +141,22 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
       handleDataUpdate(albumId);
     } catch (err) {
       console.error('Erreur lors de la génération de critique:', err);
-      setReviewError(err.message);
+      
+      // Retry automatique pour les erreurs de timeout ou 504
+      if ((err.name === 'AbortError' || err.message.includes('504') || err.message.includes('timeout')) && retryCount < maxRetries) {
+        console.log(`Tentative ${retryCount + 1}/${maxRetries + 1} - Retry automatique...`);
+        setTimeout(() => {
+          generateReview(retryCount + 1);
+        }, 2000 * (retryCount + 1)); // Délai progressif : 2s, 4s
+        return;
+      }
+      
+      let errorMessage = err.message;
+      if (err.name === 'AbortError') {
+        errorMessage = 'La génération de la critique a pris trop de temps. Veuillez réessayer.';
+      }
+      
+      setReviewError(errorMessage);
     } finally {
       setIsGeneratingReview(false);
     }

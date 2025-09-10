@@ -1,4 +1,9 @@
 {
   "framework": "nextjs",
-  "regions": ["cdg1"]
+  "regions": ["cdg1"],
+  "functions": {
+    "app/api/album/[id]/review/route.js": {
+      "maxDuration": 60
+    }
+  }
 }

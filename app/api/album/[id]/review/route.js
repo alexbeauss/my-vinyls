@@ -166,58 +166,71 @@ export async function POST(req, { params }) {
       return value;
     };
 
-    const prompt = `Tu es un critique musical expérimenté et exigeant. Tu as travaillé pour pitchfork, rolling stone, new yorker et d'autres magazines pointus. Tu es connu pour tes analyses nuancées et ton refus de la complaisance facile. Écris une critique détaillée et originale de l'album suivant en français :
+    const prompt = `Critique musicale de 120-150 mots en français :
 
-Titre: ${albumDetails.title}
-Artiste(s): ${safeGetValue(albumDetails.artists)}
-Année: ${albumDetails.year || 'Non spécifiée'}
-Genre(s): ${safeGetValue(albumDetails.genres)}
-Style(s): ${safeGetValue(albumDetails.styles)}
-Label: ${safeGetValue(albumDetails.labels)}
-Tracklist: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ? 
-  albumDetails.tracklist.slice(0, 10).map(track => `${track.title} (${track.duration || 'Durée inconnue'})`).join(', ') + 
-  (albumDetails.tracklist.length > 10 ? `... et ${albumDetails.tracklist.length - 10} autres titres` : '') 
+ALBUM: ${albumDetails.title} - ${safeGetValue(albumDetails.artists)} (${albumDetails.year || 'Année inconnue'})
+GENRE: ${safeGetValue(albumDetails.genres)} | STYLE: ${safeGetValue(albumDetails.styles)}
+TRACKS: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ? 
+  albumDetails.tracklist.slice(0, 5).map(track => track.title).join(', ') + 
+  (albumDetails.tracklist.length > 5 ? ` + ${albumDetails.tracklist.length - 5} autres` : '') 
   : 'Non disponible'}
 
-Écris une critique de 150-200 mots qui couvre :
-1. L'intention et la vision de l'album
-2. L'analyse musicale et stylistique (points forts et faiblesses)
-3. L'influence et l'impact de l'album
-4. Une conclusion avec une note sur 10 avec une décimale.
+Écris une critique qui couvre :
+1. L'essence de l'album (vision, intention)
+2. Analyse musicale (points forts/faiblesses)
+3. Impact et influence
+4. Note finale sur 10 avec décimale
 
-CRITÈRES D'ÉVALUATION ÉQUILIBRÉS :
-- 9-10/10 : Chef-d'œuvre exceptionnel, marquant, quasi-parfait
-- 7-8/10 : Très bon album avec quelques imperfections mineures
-- 5-6/10 : Album correct mais sans éclat particulier, avec des faiblesses
-- 3-4/10 : Album décevant, avec des problèmes notables
-- 1-2/10 : Album raté, peu d'intérêt
+CRITÈRES :
+- 9-10/10 : Chef-d'œuvre exceptionnel
+- 7-8/10 : Très bon avec imperfections mineures  
+- 5-6/10 : Correct mais sans éclat
+- 3-4/10 : Décevant avec problèmes notables
+- 1-2/10 : Raté, peu d'intérêt
 - 0/10 : Échec complet
 
-INSTRUCTIONS POUR UNE CRITIQUE NUANCÉE :
-- Sois honnête et équilibré : reconnais les qualités ET les défauts
-- Pointe les faiblesses quand elles existent, mais de manière constructive
-- Compare avec les standards du genre et les références pertinentes
-- Sois sans complaisance sur les vrais problèmes (textes faibles, arrangements prévisibles, performances médiocres)
-- Reconnais les réussites quand elles sont méritées
-- Varie ton style d'écriture à chaque critique
-- Commence TOUJOURS par dire ce que l'album EST, pas ce qu'il n'est pas
-- Utilise un vocabulaire riche et varié
-- Sois direct et évite les périphrases
-- Adopte un ton professionnel et nuancé
-- Chaque critique doit avoir sa propre personnalité et son propre rythme
+RÈGLES :
+- Sois honnête et équilibré
+- Commence par ce que l'album EST
+- Pointe les défauts constructivement
+- Compare aux standards du genre
+- Termine par "Note : X.X/10"`;
 
-IMPORTANT : Termine ta critique par "Note : X.X/10" où X.X est ta note avec une décimale.`;
-
-    // Générer la critique avec Gemini
+    // Générer la critique avec Gemini avec timeout
     let result, review, rating;
     
     try {
-      result = await model.generateContent(prompt);
+      const startTime = Date.now();
+      
+      // Timeout de 45 secondes pour la génération
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout de génération Gemini')), 45000);
+      });
+      
+      const generationPromise = model.generateContent(prompt);
+      
+      result = await Promise.race([generationPromise, timeoutPromise]);
       review = result.response.text();
-      console.log(`Critique générée pour ${id}, longueur: ${review.length} caractères`);
+      
+      const duration = Date.now() - startTime;
+      console.log(`Critique générée pour ${id} en ${duration}ms, longueur: ${review.length} caractères`);
+      
+      if (review.length < 50) {
+        throw new Error('Critique générée trop courte, probablement incomplète');
+      }
+      
     } catch (geminiError) {
       console.error('Erreur Gemini:', geminiError);
-      throw new Error(`Erreur lors de la génération avec Gemini: ${geminiError.message}`);
+      
+      if (geminiError.message.includes('Timeout')) {
+        throw new Error('La génération de la critique a pris trop de temps. Veuillez réessayer.');
+      } else if (geminiError.message.includes('quota')) {
+        throw new Error('Quota Google Gemini dépassé. Veuillez réessayer plus tard.');
+      } else if (geminiError.message.includes('API key')) {
+        throw new Error('Problème de configuration Google Gemini.');
+      } else {
+        throw new Error(`Erreur lors de la génération avec Gemini: ${geminiError.message}`);
+      }
     }
 
     // Extraire la note de la critique avec plusieurs patterns
