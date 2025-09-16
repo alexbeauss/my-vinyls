@@ -119,9 +119,9 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
       fetchAlbumDetails();
       fetchExistingReview();
     }
-  }, [albumId, handleDataUpdate]);
+  }, [albumId, handleDataUpdate, estimatedValue, generateReview]);
 
-  const generateReview = async (retryCount = 0) => {
+  const generateReview = useCallback(async (retryCount = 0) => {
     setIsGeneratingReview(true);
     setReviewError(null);
     
@@ -186,7 +186,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
     } finally {
       setIsGeneratingReview(false);
     }
-  };
+  }, [albumId, handleDataUpdate]);
 
   if (isLoading) return <div>Chargement...</div>;
   if (error) return <div>Erreur : {error}</div>;

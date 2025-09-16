@@ -20,7 +20,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [valuesEnabled, setValuesEnabled] = useState(false);
   const [valuesProgress, setValuesProgress] = useState({ current: 0, total: 0 });
   const [lastValuesUpdate, setLastValuesUpdate] = useState(null);
-  const [isLoadingRatings, setIsLoadingRatings] = useState(false);
 
   // Fonction pour mettre à jour les données d'un album spécifique
   const updateAlbumData = async (albumId) => {

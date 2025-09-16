@@ -1,6 +1,6 @@
 import { getSession } from '@auth0/nextjs-auth0';
 import { cookies } from 'next/headers';
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../../lib/awsConfig';
 import Discogs from 'disconnect';
 
@@ -36,14 +36,6 @@ export async function GET(req, { params }) {
 
     const dis = new Discogs.Client({ userToken: discogsToken });
     const albumDetails = await dis.database().getRelease(id);
-
-    // Extraire la valeur estimée si disponible
-    let estimatedValue = null;
-    if (albumDetails.estimated_value) {
-      estimatedValue = albumDetails.estimated_value;
-    } else if (albumDetails.lowest_price) {
-      estimatedValue = albumDetails.lowest_price;
-    }
 
     // Ne pas sauvegarder automatiquement la valeur ici
     // La sauvegarde des valeurs est gérée par la route dédiée /api/album/[id]/value
