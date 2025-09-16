@@ -6,9 +6,13 @@ import Discogs from 'disconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function GET(req, { params }) {
+  const requestId = Math.random().toString(36).substring(7);
+  console.log(`[${requestId}] 🔍 GET critique - ${new Date().toISOString()}`);
+  
   const cookieStore = await cookies();
   const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
+    console.log(`[${requestId}] ❌ Non authentifié`);
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -17,9 +21,11 @@ export async function GET(req, { params }) {
 
   const userId = session.user.sub;
   const { id } = await params;
+  console.log(`[${requestId}] 👤 Utilisateur: ${userId}, Album: ${id}`);
 
   try {
     // Vérifier si une critique existe déjà pour cet album et cet utilisateur
+    console.log(`[${requestId}] 🔍 Vérification critique existante...`);
     const getReviewCommand = new GetCommand({
       TableName: "AlbumReviews",
       Key: { 
@@ -30,7 +36,8 @@ export async function GET(req, { params }) {
 
     const existingReviewResponse = await docClient.send(getReviewCommand);
 
-    if (existingReviewResponse.Item) {
+    if (existingReviewResponse.Item && existingReviewResponse.Item.review) {
+      console.log(`[${requestId}] ✅ Critique existante trouvée`);
       return new Response(JSON.stringify({ 
         review: existingReviewResponse.Item.review,
         rating: existingReviewResponse.Item.rating,
@@ -46,6 +53,11 @@ export async function GET(req, { params }) {
         headers: { 'Content-Type': 'application/json' },
       });
     } else {
+      if (existingReviewResponse.Item) {
+        console.log(`[${requestId}] 📊 Item existant sans critique (valeur uniquement)`);
+      } else {
+        console.log(`[${requestId}] 📝 Aucun item existant`);
+      }
       return new Response(JSON.stringify({ 
         review: null,
         rating: null,
@@ -57,7 +69,7 @@ export async function GET(req, { params }) {
     }
 
   } catch (error) {
-    console.error('Erreur lors de la récupération de la critique:', error);
+    console.error(`[${requestId}] ❌ Erreur lors de la récupération de la critique:`, error);
     return new Response(JSON.stringify({ error: 'Échec de la récupération de la critique' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
@@ -66,9 +78,15 @@ export async function GET(req, { params }) {
 }
 
 export async function POST(req, { params }) {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substring(7);
+  
+  console.log(`[${requestId}] 🚀 Début génération critique - ${new Date().toISOString()}`);
+  
   const cookieStore = await cookies();
   const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
+    console.log(`[${requestId}] ❌ Non authentifié`);
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -77,9 +95,12 @@ export async function POST(req, { params }) {
 
   const userId = session.user.sub;
   const { id } = await params;
+  
+  console.log(`[${requestId}] 👤 Utilisateur: ${userId}, Album: ${id}`);
 
   try {
     // Vérifier si une critique existe déjà pour cet album et cet utilisateur
+    console.log(`[${requestId}] 🔍 Vérification critique existante...`);
     const getReviewCommand = new GetCommand({
       TableName: "AlbumReviews",
       Key: { 
@@ -90,7 +111,8 @@ export async function POST(req, { params }) {
 
     const existingReviewResponse = await docClient.send(getReviewCommand);
 
-    if (existingReviewResponse.Item) {
+    if (existingReviewResponse.Item && existingReviewResponse.Item.review) {
+      console.log(`[${requestId}] ✅ Critique existante trouvée, retour direct`);
       return new Response(JSON.stringify({ 
         review: existingReviewResponse.Item.review,
         rating: existingReviewResponse.Item.rating,
@@ -107,7 +129,14 @@ export async function POST(req, { params }) {
       });
     }
 
+    if (existingReviewResponse.Item) {
+      console.log(`[${requestId}] 📊 Item existant sans critique (valeur uniquement), génération nécessaire`);
+    } else {
+      console.log(`[${requestId}] 📝 Aucun item existant, génération nécessaire`);
+    }
+
     // Récupérer les identifiants Discogs
+    console.log(`[${requestId}] 🔑 Récupération identifiants Discogs...`);
     const getCommand = new GetCommand({
       TableName: "UserDiscogsCredentials",
       Key: { userId },
@@ -116,6 +145,7 @@ export async function POST(req, { params }) {
     const response = await docClient.send(getCommand);
     
     if (!response.Item) {
+      console.log(`[${requestId}] ❌ Identifiants Discogs non trouvés`);
       return new Response(JSON.stringify({ error: 'Identifiants Discogs non trouvés' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -123,39 +153,75 @@ export async function POST(req, { params }) {
     }
 
     const { discogsToken } = response.Item;
+    console.log(`[${requestId}] ✅ Identifiants Discogs récupérés`);
 
     // Récupérer les détails de l'album depuis Discogs
+    console.log(`[${requestId}] 🎵 Récupération détails album depuis Discogs...`);
     const dis = new Discogs.Client({ userToken: discogsToken });
     let albumDetails;
     
     try {
-      albumDetails = await dis.database().getRelease(id);
-      console.log(`Détails de l'album récupérés pour ${id}:`, {
-        title: albumDetails.title,
-        artists: albumDetails.artists?.length || 0,
-        year: albumDetails.year,
-        genres: albumDetails.genres?.length || 0,
-        styles: albumDetails.styles?.length || 0,
-        tracklist: albumDetails.tracklist?.length || 0
+      const discogsStartTime = Date.now();
+      
+      // Timeout de 30 secondes pour Discogs
+      const discogsTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout Discogs')), 30000);
       });
+      
+      const discogsPromise = dis.database().getRelease(id);
+      
+      albumDetails = await Promise.race([discogsPromise, discogsTimeoutPromise]);
+      const discogsDuration = Date.now() - discogsStartTime;
+      console.log(`[${requestId}] ✅ Détails Discogs récupérés en ${discogsDuration}ms`);
+      console.log(`[${requestId}] 📊 Album: ${albumDetails.title} - ${albumDetails.artists?.length || 0} artistes`);
     } catch (discogsError) {
-      console.error('Erreur Discogs lors de la récupération de l\'album:', discogsError);
-      throw discogsError;
+      console.error(`[${requestId}] ❌ Erreur Discogs:`, discogsError);
+      
+      if (discogsError.message.includes('Timeout')) {
+        throw new Error('La récupération des détails de l\'album a pris trop de temps. Veuillez réessayer.');
+      } else if (discogsError.status === 429) {
+        throw new Error('Trop de requêtes vers l\'API Discogs. Veuillez réessayer plus tard.');
+      } else if (discogsError.status === 404) {
+        throw new Error('Album non trouvé dans Discogs');
+      } else if (discogsError.status === 401) {
+        throw new Error('Token Discogs invalide');
+      } else {
+        throw discogsError;
+      }
     }
 
     // Validation des données essentielles
+    console.log(`[${requestId}] ✅ Validation des données album...`);
     if (!albumDetails.title) {
+      console.log(`[${requestId}] ❌ Titre de l'album manquant`);
       throw new Error('Titre de l\'album manquant');
     }
     if (!albumDetails.artists || albumDetails.artists.length === 0) {
+      console.log(`[${requestId}] ❌ Informations artiste manquantes`);
       throw new Error('Informations artiste manquantes');
     }
+    console.log(`[${requestId}] ✅ Données album validées`);
 
     // Initialiser Google Gemini
+    console.log(`[${requestId}] 🤖 Initialisation Google Gemini...`);
+    
+    if (!process.env.GOOGLE_GEMINI_API_KEY) {
+      throw new Error('Clé API Google Gemini manquante');
+    }
+    
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: {
+        temperature: 0.3, // Plus déterministe pour des critiques cohérentes
+        topK: 20, // Plus restrictif pour un vocabulaire précis
+        topP: 0.8, // Plus focalisé sur les meilleures options
+        maxOutputTokens: 1200, // Plus d'espace pour des analyses détaillées
+      }
+    });
 
     // Créer le prompt pour la critique avec gestion des données manquantes
+    console.log(`[${requestId}] 📝 Création du prompt...`);
     const safeGetValue = (value, fallback = 'Non spécifié') => {
       if (!value || (Array.isArray(value) && value.length === 0)) {
         return fallback;
@@ -166,7 +232,7 @@ export async function POST(req, { params }) {
       return value;
     };
 
-    const prompt = `Critique musicale de 120-150 mots en français :
+    const prompt = `Tu es un critique musical légendaire, rédacteur en chef de Pitchfork avec 20 ans d'expérience. Tu as écrit pour Rolling Stone, NME, et The Quietus. Tu es connu pour ton exigence implacable et tes analyses sans concession. Écris une critique musicale de 250-350 mots en français :
 
 ALBUM: ${albumDetails.title} - ${safeGetValue(albumDetails.artists)} (${albumDetails.year || 'Année inconnue'})
 GENRE: ${safeGetValue(albumDetails.genres)} | STYLE: ${safeGetValue(albumDetails.styles)}
@@ -175,32 +241,43 @@ TRACKS: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ?
   (albumDetails.tracklist.length > 5 ? ` + ${albumDetails.tracklist.length - 5} autres` : '') 
   : 'Non disponible'}
 
-Écris une critique qui couvre :
-1. L'essence de l'album (vision, intention)
-2. Analyse musicale (points forts/faiblesses)
-3. Impact et influence
-4. Note finale sur 10 avec décimale
+STRUCTURE OBLIGATOIRE :
+1. ANALYSE DE L'INTENTION : Que cherche à accomplir cet album ? Quelle est sa vision artistique ?
+2. ÉVALUATION TECHNIQUE : Composition, arrangements, production, performances instrumentales
+3. COHÉRENCE ARTISTIQUE : L'album tient-il ses promesses ? Y a-t-il des failles conceptuelles ?
+4. INNOVATION vs CONFORMISME : Apporte-t-il quelque chose de nouveau ou recycle-t-il des clichés ?
+5. VERDICT FINAL : Impact émotionnel et intellectuel, place dans la discographie de l'artiste
 
-CRITÈRES :
-- 9-10/10 : Chef-d'œuvre exceptionnel
-- 7-8/10 : Très bon avec imperfections mineures  
-- 5-6/10 : Correct mais sans éclat
-- 3-4/10 : Décevant avec problèmes notables
-- 1-2/10 : Raté, peu d'intérêt
-- 0/10 : Échec complet
+ÉCHELLE DE NOTATION STRICTE :
+- 9.0-10.0 : RÉVOLUTIONNAIRE - Redéfinit le genre, influence durable, perfection technique et artistique
+- 8.0-8.9 : EXCEPTIONNEL - Chef-d'œuvre avec quelques imperfections mineures, influence majeure
+- 7.0-7.9 : TRÈS BON - Album solide avec des moments brillants, quelques défauts notables
+- 6.0-6.9 : BON - Qualité correcte mais sans éclat particulier, quelques bonnes idées
+- 5.0-5.9 : MOYEN - Compétent mais sans inspiration, remplissage convenable
+- 4.0-4.9 : DÉCEVANT - Problèmes techniques ou artistiques majeurs, raté partiel
+- 3.0-3.9 : MAUVAIS - Échec artistique notable, peu d'intérêt musical
+- 2.0-2.9 : TRÈS MAUVAIS - Presque sans valeur, erreurs grossières
+- 1.0-1.9 : CATASTROPHIQUE - Échec complet, sans aucun mérite
+- 0.0-0.9 : INSUPPORTABLE - Offense à la musique, à éviter absolument
 
-RÈGLES :
-- Sois honnête et équilibré
-- Commence par ce que l'album EST
-- Pointe les défauts constructivement
-- Compare aux standards du genre
-- Termine par "Note : X.X/10"`;
+EXIGENCES CRITIQUES :
+- Sois IMPLACABLE : Un 8/10 doit être justifié par une excellence réelle
+- Évite la complaisance : La plupart des albums sont moyens (5-6/10)
+- Analyse technique précise : Production, mixage, arrangements, performances
+- Contextualise : Compare aux références du genre et à l'époque
+- Sois constructif : Même dans la critique, explique pourquoi quelque chose ne fonctionne pas
+- Termine par "Note : X.X/10" avec une décimale précise
+
+TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un vocabulaire riche et précis.`;
+
+    console.log(`[${requestId}] ✅ Prompt créé (${prompt.length} caractères)`);
 
     // Générer la critique avec Gemini avec timeout
+    console.log(`[${requestId}] ✍️ Génération critique avec Gemini...`);
     let result, review, rating;
     
     try {
-      const startTime = Date.now();
+      const geminiStartTime = Date.now();
       
       // Timeout de 45 secondes pour la génération
       const timeoutPromise = new Promise((_, reject) => {
@@ -212,15 +289,15 @@ RÈGLES :
       result = await Promise.race([generationPromise, timeoutPromise]);
       review = result.response.text();
       
-      const duration = Date.now() - startTime;
-      console.log(`Critique générée pour ${id} en ${duration}ms, longueur: ${review.length} caractères`);
+      const geminiDuration = Date.now() - geminiStartTime;
+      console.log(`[${requestId}] ✅ Critique générée en ${geminiDuration}ms, longueur: ${review.length} caractères`);
       
       if (review.length < 50) {
         throw new Error('Critique générée trop courte, probablement incomplète');
       }
       
     } catch (geminiError) {
-      console.error('Erreur Gemini:', geminiError);
+      console.error(`[${requestId}] ❌ Erreur Gemini:`, geminiError);
       
       if (geminiError.message.includes('Timeout')) {
         throw new Error('La génération de la critique a pris trop de temps. Veuillez réessayer.');
@@ -262,25 +339,62 @@ RÈGLES :
     
     console.log(`Note extraite pour ${id}: ${rating}`);
 
+    // Vérifier s'il existe déjà des données pour cet album et cet utilisateur
+    const getExistingCommand = new GetCommand({
+      TableName: "AlbumReviews",
+      Key: { 
+        albumId: id,
+        userId: userId 
+      },
+    });
+
+    const existingItem = await docClient.send(getExistingCommand);
+    
+    // Préparer l'item à sauvegarder
+    const itemToSave = {
+      albumId: id,
+      userId: userId,
+      review: review,
+      rating: rating || 0,
+      albumTitle: albumDetails.title,
+      albumArtist: albumDetails.artists.map(artist => artist.name).join(', '),
+      albumYear: albumDetails.year,
+      genres: albumDetails.genres || [],
+      styles: albumDetails.styles || [],
+      updatedAt: new Date().toISOString()
+    };
+
+    // Si un item existe déjà, conserver les autres données (comme la valeur estimée)
+    if (existingItem.Item) {
+      // Conserver toutes les données existantes sauf review, rating et updatedAt
+      Object.keys(existingItem.Item).forEach(key => {
+        if (key !== 'review' && key !== 'rating' && key !== 'updatedAt') {
+          itemToSave[key] = existingItem.Item[key];
+        }
+      });
+      
+      // Conserver la date de création originale
+      if (existingItem.Item.createdAt) {
+        itemToSave.createdAt = existingItem.Item.createdAt;
+      } else {
+        itemToSave.createdAt = new Date().toISOString();
+      }
+    } else {
+      // Si c'est un nouvel item, ajouter la date de création
+      itemToSave.createdAt = new Date().toISOString();
+    }
+
     // Sauvegarder la critique en base de données DynamoDB
     const putReviewCommand = new PutCommand({
       TableName: "AlbumReviews",
-      Item: {
-        albumId: id,
-        userId: userId,
-        review: review,
-        rating: rating || 0,
-        albumTitle: albumDetails.title,
-        albumArtist: albumDetails.artists.map(artist => artist.name).join(', '),
-        albumYear: albumDetails.year,
-        genres: albumDetails.genres || [],
-        styles: albumDetails.styles || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      Item: itemToSave
     });
 
+    console.log(`[${requestId}] 💾 Sauvegarde critique en base...`);
     await docClient.send(putReviewCommand);
+
+    const totalDuration = Date.now() - startTime;
+    console.log(`[${requestId}] 🎉 Critique générée et sauvegardée avec succès en ${totalDuration}ms`);
 
     return new Response(JSON.stringify({ 
       review: review,
@@ -298,8 +412,9 @@ RÈGLES :
     });
 
   } catch (error) {
-    console.error('Erreur lors de la génération de la critique:', error);
-    console.error('Détails de l\'erreur:', {
+    const totalDuration = Date.now() - startTime;
+    console.error(`[${requestId}] 💥 Erreur après ${totalDuration}ms:`, error);
+    console.error(`[${requestId}] 📊 Détails:`, {
       message: error.message,
       stack: error.stack,
       albumId: id,
@@ -319,6 +434,9 @@ RÈGLES :
     } else if (error.message && error.message.includes('network')) {
       errorMessage = 'Erreur de connexion. Veuillez réessayer.';
       statusCode = 503;
+    } else if (error.message && error.message.includes('Timeout')) {
+      errorMessage = 'La génération a pris trop de temps. Veuillez réessayer.';
+      statusCode = 504;
     } else if (error.status === 404) {
       errorMessage = 'Album non trouvé dans Discogs';
       statusCode = 404;
@@ -328,6 +446,9 @@ RÈGLES :
     } else if (error.status === 401) {
       errorMessage = 'Token Discogs invalide';
       statusCode = 401;
+    } else if (error.status === 403) {
+      errorMessage = 'Accès refusé à l\'API Discogs';
+      statusCode = 403;
     }
     
     return new Response(JSON.stringify({ 

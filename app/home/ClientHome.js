@@ -20,6 +20,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [valuesEnabled, setValuesEnabled] = useState(false);
   const [valuesProgress, setValuesProgress] = useState({ current: 0, total: 0 });
   const [lastValuesUpdate, setLastValuesUpdate] = useState(null);
+  const [isLoadingRatings, setIsLoadingRatings] = useState(false);
 
   // Fonction pour mettre à jour les données d'un album spécifique
   const updateAlbumData = async (albumId) => {
@@ -403,10 +404,10 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
                 <p className="text-xs text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
                 
-                {/* Note et valeur dans le carrousel */}
+                {/* Note et valeur dans le carrousel - affichage seulement si disponibles */}
                 <div className="flex items-center gap-4 mt-2">
                   {/* Note */}
-                  {albumRatings[randomAlbum[carouselIndex].id] ? (
+                  {albumRatings[randomAlbum[carouselIndex].id] && (
                     <div className="flex items-center">
                       <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
@@ -415,38 +416,18 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
                         {albumRatings[randomAlbum[carouselIndex].id].toFixed(1)}/10
                       </span>
                     </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <svg className="w-4 h-4 text-gray-400 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                      </svg>
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Pas de note
-                      </span>
-                    </div>
                   )}
                   
                   {/* Valeur */}
-                  {valuesEnabled && (
-                    albumValues[randomAlbum[carouselIndex].id] ? (
-                      <div className="flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                        <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                          {typeof albumValues[randomAlbum[carouselIndex].id] === 'number' ? `${albumValues[randomAlbum[carouselIndex].id].toFixed(2)} €` : albumValues[randomAlbum[carouselIndex].id]}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center">
-                        <svg className="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                          Pas de valeur
-                        </span>
-                      </div>
-                    )
+                  {valuesEnabled && albumValues[randomAlbum[carouselIndex].id] && (
+                    <div className="flex items-center">
+                      <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                      <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                        {typeof albumValues[randomAlbum[carouselIndex].id] === 'number' ? `${albumValues[randomAlbum[carouselIndex].id].toFixed(2)} €` : albumValues[randomAlbum[carouselIndex].id]}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -610,7 +591,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                     Genre : {release.basic_information.styles.join(', ') || 'N/A'}
                   </p>
-                  {albumRatings[release.id] ? (
+                  {albumRatings[release.id] && (
                     <div className="mt-2 flex items-center">
                       <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
@@ -619,36 +600,16 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
                         {albumRatings[release.id].toFixed(1)}/10
                       </span>
                     </div>
-                  ) : (
-                    <div className="mt-2 flex items-center">
-                      <svg className="w-4 h-4 text-gray-400 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  )}
+                  {valuesEnabled && albumValues[release.id] && (
+                    <div className="mt-1 flex items-center">
+                      <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                       </svg>
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                        Pas de note
+                      <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                        {typeof albumValues[release.id] === 'number' ? `${albumValues[release.id].toFixed(2)} €` : albumValues[release.id]}
                       </span>
                     </div>
-                  )}
-                  {valuesEnabled && (
-                    albumValues[release.id] ? (
-                      <div className="mt-1 flex items-center">
-                        <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                        <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                          {typeof albumValues[release.id] === 'number' ? `${albumValues[release.id].toFixed(2)} €` : albumValues[release.id]}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="mt-1 flex items-center">
-                        <svg className="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                          Pas de valeur
-                        </span>
-                      </div>
-                    )
                   )}
                 </div>
               </div>

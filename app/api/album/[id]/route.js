@@ -45,63 +45,8 @@ export async function GET(req, { params }) {
       estimatedValue = albumDetails.lowest_price;
     }
 
-    // Si une valeur est trouvée, la sauvegarder en base de données
-    if (estimatedValue) {
-      try {
-        // Récupérer l'item existant pour le mettre à jour
-        const getExistingCommand = new GetCommand({
-          TableName: "AlbumReviews",
-          Key: { 
-            albumId: id,
-            userId: userId 
-          },
-        });
-
-        const existingItem = await docClient.send(getExistingCommand);
-        
-        // Préparer l'item à sauvegarder
-        const itemToSave = {
-          albumId: id,
-          userId: userId,
-          estimatedValue: estimatedValue,
-          valueUpdatedAt: new Date().toISOString()
-        };
-
-        // Si un item existe déjà, conserver les autres données
-        if (existingItem.Item) {
-          itemToSave.review = existingItem.Item.review;
-          itemToSave.rating = existingItem.Item.rating;
-          itemToSave.albumTitle = existingItem.Item.albumTitle;
-          itemToSave.albumArtist = existingItem.Item.albumArtist;
-          itemToSave.albumYear = existingItem.Item.albumYear;
-          itemToSave.genres = existingItem.Item.genres;
-          itemToSave.styles = existingItem.Item.styles;
-          itemToSave.createdAt = existingItem.Item.createdAt;
-          itemToSave.updatedAt = existingItem.Item.updatedAt;
-        } else {
-          // Si c'est un nouvel item, ajouter les infos de base de l'album
-          itemToSave.albumTitle = albumDetails.title;
-          itemToSave.albumArtist = albumDetails.artists.map(artist => artist.name).join(', ');
-          itemToSave.albumYear = albumDetails.year;
-          itemToSave.genres = albumDetails.genres || [];
-          itemToSave.styles = albumDetails.styles || [];
-          itemToSave.createdAt = new Date().toISOString();
-          itemToSave.updatedAt = new Date().toISOString();
-        }
-
-        // Sauvegarder en base de données
-        const putValueCommand = new PutCommand({
-          TableName: "AlbumReviews",
-          Item: itemToSave
-        });
-
-        await docClient.send(putValueCommand);
-        console.log(`Valeur sauvegardée: ${estimatedValue} € pour l'album ${id}`);
-      } catch (saveError) {
-        console.error('Erreur lors de la sauvegarde de la valeur:', saveError);
-        // Ne pas faire échouer la requête si la sauvegarde échoue
-      }
-    }
+    // Ne pas sauvegarder automatiquement la valeur ici
+    // La sauvegarde des valeurs est gérée par la route dédiée /api/album/[id]/value
 
     return new Response(JSON.stringify(albumDetails), {
       status: 200,

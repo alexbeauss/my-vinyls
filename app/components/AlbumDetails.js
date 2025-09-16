@@ -44,16 +44,38 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
           // Silencieux - pas de valeur stockée
         }
 
-        // Si pas de valeur stockée, utiliser celle de Discogs
+        // Si pas de valeur stockée, utiliser celle de Discogs et la sauvegarder
         if (!estimatedValue) {
           if (data.estimated_value) {
             setEstimatedValue(data.estimated_value);
             setValueSource('discogs');
+            // Sauvegarder automatiquement la valeur en base de données
+            try {
+              await fetch(`/api/album/${albumId}/value`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              });
+            } catch (error) {
+              console.log('Erreur lors de la sauvegarde automatique de la valeur:', error);
+            }
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
           } else if (data.lowest_price) {
             setEstimatedValue(data.lowest_price);
             setValueSource('discogs');
+            // Sauvegarder automatiquement la valeur en base de données
+            try {
+              await fetch(`/api/album/${albumId}/value`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              });
+            } catch (error) {
+              console.log('Erreur lors de la sauvegarde automatique de la valeur:', error);
+            }
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
           }
@@ -68,7 +90,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
     async function fetchExistingReview() {
       try {
         const response = await fetch(`/api/album/${albumId}/review`, {
-          method: 'POST',
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -81,6 +103,10 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
             setRating(data.rating);
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
+          } else {
+            // Aucune critique existante, lancer automatiquement la génération
+            console.log('Aucune critique existante, génération automatique...');
+            generateReview();
           }
         }
       } catch {
@@ -321,28 +347,17 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
             </svg>
             Critique de l&apos;album
           </h2>
-          {!review && (
+          {!review && !isGeneratingReview && (
             <button
               onClick={generateReview}
-              disabled={isGeneratingReview}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 transform hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed shadow-lg"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 transform hover:scale-105 shadow-lg"
             >
-              {isGeneratingReview ? (
-                <div className="flex items-center space-x-2">
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Génération...</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span>Générer une critique</span>
-                </div>
-              )}
+              <div className="flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Générer une critique</span>
+              </div>
             </button>
           )}
         </div>
@@ -362,7 +377,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>Génération de la critique en cours avec Google Gemini...</span>
+            <span>Génération automatique de la critique en cours avec Google Gemini...</span>
           </div>
         )}
         

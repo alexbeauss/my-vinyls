@@ -150,17 +150,17 @@ export async function POST(req, { params }) {
         valueUpdatedAt: new Date().toISOString()
       };
 
-      // Si un item existe déjà, conserver les autres données
+      // Si un item existe déjà, conserver TOUTES les données existantes
       if (existingItem.Item) {
-        itemToSave.review = existingItem.Item.review;
-        itemToSave.rating = existingItem.Item.rating;
-        itemToSave.albumTitle = existingItem.Item.albumTitle;
-        itemToSave.albumArtist = existingItem.Item.albumArtist;
-        itemToSave.albumYear = existingItem.Item.albumYear;
-        itemToSave.genres = existingItem.Item.genres;
-        itemToSave.styles = existingItem.Item.styles;
-        itemToSave.createdAt = existingItem.Item.createdAt;
-        itemToSave.updatedAt = existingItem.Item.updatedAt;
+        // Conserver toutes les données existantes
+        Object.keys(existingItem.Item).forEach(key => {
+          if (key !== 'estimatedValue' && key !== 'valueUpdatedAt') {
+            itemToSave[key] = existingItem.Item[key];
+          }
+        });
+        
+        // Mettre à jour seulement la valeur et la date de mise à jour
+        itemToSave.updatedAt = new Date().toISOString();
       } else {
         // Si c'est un nouvel item, ajouter les infos de base de l'album
         itemToSave.albumTitle = albumDetails.title;
