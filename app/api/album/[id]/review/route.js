@@ -241,12 +241,13 @@ TRACKS: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ?
   (albumDetails.tracklist.length > 5 ? ` + ${albumDetails.tracklist.length - 5} autres` : '') 
   : 'Non disponible'}
 
-STRUCTURE OBLIGATOIRE :
+STRUCTURE OBLIGATOIRE (mais n'affiche pas cette structure dans la critique, reste littéraire et non structurée) :
 1. ANALYSE DE L'INTENTION : Que cherche à accomplir cet album ? Quelle est sa vision artistique ?
 2. ÉVALUATION TECHNIQUE : Composition, arrangements, production, performances instrumentales
 3. COHÉRENCE ARTISTIQUE : L'album tient-il ses promesses ? Y a-t-il des failles conceptuelles ?
 4. INNOVATION vs CONFORMISME : Apporte-t-il quelque chose de nouveau ou recycle-t-il des clichés ?
 5. VERDICT FINAL : Impact émotionnel et intellectuel, place dans la discographie de l'artiste
+6. RECOMMANDATION : Quel album majeur permettrait d'aller plus loin ?
 
 ÉCHELLE DE NOTATION STRICTE :
 - 9.0-10.0 : RÉVOLUTIONNAIRE - Redéfinit le genre, influence durable, perfection technique et artistique
