@@ -12,12 +12,82 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
   const [reviewError, setReviewError] = useState(null);
   const [estimatedValue, setEstimatedValue] = useState(null);
   const [valueSource, setValueSource] = useState(null); // 'saved' ou 'discogs'
+  const [recommendedAlbum, setRecommendedAlbum] = useState(null);
+  const [appleMusicData, setAppleMusicData] = useState(null);
+  const [isLoadingAppleMusic, setIsLoadingAppleMusic] = useState(false);
 
   const handleDataUpdate = useCallback((id) => {
     if (onDataUpdate) {
       onDataUpdate(id);
     }
   }, [onDataUpdate]);
+
+  // Fonction pour extraire l'album recommandé de la critique
+  const extractRecommendedAlbum = useCallback((reviewText) => {
+    if (!reviewText) return null;
+    
+    // Chercher le pattern "ALBUM RECOMMANDÉ : [Titre] - [Artiste] ([Année])"
+    const match = reviewText.match(/ALBUM RECOMMANDÉ\s*:\s*(.+?)\s*-\s*(.+?)\s*\((\d{4})\)/i);
+    
+    if (match) {
+      const [, title, artist, year] = match;
+      
+      // Nettoyer le titre et l'artiste des caractères de formatage
+      const cleanTitle = title
+        .trim()
+        .replace(/\*+/g, '') // Supprimer les astérisques
+        .replace(/^["']|["']$/g, '') // Supprimer les guillemets au début/fin
+        .replace(/^_+|_+$/g, '') // Supprimer les underscores au début/fin
+        .replace(/^`+|`+$/g, '') // Supprimer les backticks au début/fin
+        .trim();
+      
+      const cleanArtist = artist
+        .trim()
+        .replace(/\*+/g, '') // Supprimer les astérisques
+        .replace(/^["']|["']$/g, '') // Supprimer les guillemets au début/fin
+        .replace(/^_+|_+$/g, '') // Supprimer les underscores au début/fin
+        .replace(/^`+|`+$/g, '') // Supprimer les backticks au début/fin
+        .trim();
+      
+      console.log(`🎵 Album recommandé extrait:`);
+      console.log(`   Titre original: "${title}"`);
+      console.log(`   Titre nettoyé: "${cleanTitle}"`);
+      console.log(`   Artiste original: "${artist}"`);
+      console.log(`   Artiste nettoyé: "${cleanArtist}"`);
+      
+      return {
+        title: cleanTitle,
+        artist: cleanArtist,
+        year: parseInt(year)
+      };
+    }
+    
+    return null;
+  }, []);
+
+  // Fonction pour récupérer les données Apple Music
+  const fetchAppleMusicData = useCallback(async (album) => {
+    if (!album) return;
+    
+    setIsLoadingAppleMusic(true);
+    try {
+      const response = await fetch(`/api/apple-music/search?artist=${encodeURIComponent(album.artist)}&album=${encodeURIComponent(album.title)}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAppleMusicData(data);
+        console.log('Données Apple Music récupérées:', data);
+      } else {
+        console.error('Erreur lors de la récupération des données Apple Music');
+        setAppleMusicData(null);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération des données Apple Music:', error);
+      setAppleMusicData(null);
+    } finally {
+      setIsLoadingAppleMusic(false);
+    }
+  }, []);
 
   const generateReview = useCallback(async (retryCount = 0) => {
     setIsGeneratingReview(true);
@@ -61,6 +131,15 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
       setReview(data.review);
       setRating(data.rating);
       
+      // Extraire l'album recommandé de la critique
+      const recommended = extractRecommendedAlbum(data.review);
+      setRecommendedAlbum(recommended);
+      
+      // Récupérer les données Apple Music si un album est recommandé
+      if (recommended) {
+        fetchAppleMusicData(recommended);
+      }
+      
       // Déclencher la mise à jour de la collection
       handleDataUpdate(albumId);
     } catch (err) {
@@ -84,7 +163,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
     } finally {
       setIsGeneratingReview(false);
     }
-  }, [albumId, handleDataUpdate]);
+  }, [albumId, handleDataUpdate, extractRecommendedAlbum, fetchAppleMusicData]);
 
   useEffect(() => {
     async function fetchAlbumDetails() {
@@ -124,8 +203,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
                   'Content-Type': 'application/json',
                 },
               });
-            } catch (error) {
-              console.log('Erreur lors de la sauvegarde automatique de la valeur:', error);
+            } catch {
             }
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
@@ -140,8 +218,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
                   'Content-Type': 'application/json',
                 },
               });
-            } catch (error) {
-              console.log('Erreur lors de la sauvegarde automatique de la valeur:', error);
+            } catch {
             }
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
@@ -168,17 +245,25 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
           if (data.review) {
             setReview(data.review);
             setRating(data.rating);
+            
+            // Extraire l'album recommandé de la critique existante
+            const recommended = extractRecommendedAlbum(data.review);
+            setRecommendedAlbum(recommended);
+            
+            // Récupérer les données Apple Music si un album est recommandé
+            if (recommended) {
+              fetchAppleMusicData(recommended);
+            }
+            
             // Déclencher la mise à jour de la collection
             handleDataUpdate(albumId);
           } else {
             // Aucune critique existante, lancer automatiquement la génération
-            console.log('Aucune critique existante, génération automatique...');
             generateReview();
           }
         }
       } catch {
         // Silencieux - pas de critique existante
-        console.log('Aucune critique existante trouvée');
       }
     }
 
@@ -186,7 +271,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
       fetchAlbumDetails();
       fetchExistingReview();
     }
-  }, [albumId, handleDataUpdate, estimatedValue, generateReview]);
+  }, [albumId, handleDataUpdate, estimatedValue, generateReview, extractRecommendedAlbum, fetchAppleMusicData]);
 
   if (isLoading) return <div>Chargement...</div>;
   if (error) return <div>Erreur : {error}</div>;
@@ -417,6 +502,70 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
               >
                 Régénérer
               </button>
+            </div>
+          </div>
+        )}
+        
+        {recommendedAlbum && (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700 rounded-xl p-6 mt-6">
+            <div className="flex items-center mb-4">
+              <svg className="w-6 h-6 text-purple-600 dark:text-purple-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-200">
+                Album recommandé
+              </h3>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-100 dark:border-purple-800">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  {appleMusicData?.artwork && (
+                    <Image 
+                      src={appleMusicData.artwork} 
+                      alt={`${recommendedAlbum.title} artwork`}
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 rounded-lg mr-3 object-cover"
+                    />
+                  )}
+                  <div>
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                      {appleMusicData?.album || recommendedAlbum.title}
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {appleMusicData?.artist || recommendedAlbum.artist} • {appleMusicData?.year || recommendedAlbum.year}
+                    </p>
+                    {appleMusicData?.genre && (
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                        {appleMusicData.genre}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {isLoadingAppleMusic ? (
+                  <div className="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-600 rounded-lg text-sm font-medium">
+                    <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Recherche...
+                  </div>
+                ) : (
+                  <a
+                    href={appleMusicData?.directUrl || `https://music.apple.com/search?term=${encodeURIComponent(`${recommendedAlbum.artist} ${recommendedAlbum.title}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors duration-200 text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    {appleMusicData?.found ? 'Écouter sur Apple Music' : 'Rechercher sur Apple Music'}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         )}

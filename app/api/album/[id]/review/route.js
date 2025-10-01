@@ -7,12 +7,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function GET(req, { params }) {
   const requestId = Math.random().toString(36).substring(7);
-  console.log(`[${requestId}] 🔍 GET critique - ${new Date().toISOString()}`);
   
   const cookieStore = await cookies();
   const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
-    console.log(`[${requestId}] ❌ Non authentifié`);
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -21,11 +19,9 @@ export async function GET(req, { params }) {
 
   const userId = session.user.sub;
   const { id } = await params;
-  console.log(`[${requestId}] 👤 Utilisateur: ${userId}, Album: ${id}`);
 
   try {
     // Vérifier si une critique existe déjà pour cet album et cet utilisateur
-    console.log(`[${requestId}] 🔍 Vérification critique existante...`);
     const getReviewCommand = new GetCommand({
       TableName: "AlbumReviews",
       Key: { 
@@ -37,7 +33,6 @@ export async function GET(req, { params }) {
     const existingReviewResponse = await docClient.send(getReviewCommand);
 
     if (existingReviewResponse.Item && existingReviewResponse.Item.review) {
-      console.log(`[${requestId}] ✅ Critique existante trouvée`);
       return new Response(JSON.stringify({ 
         review: existingReviewResponse.Item.review,
         rating: existingReviewResponse.Item.rating,
@@ -54,9 +49,7 @@ export async function GET(req, { params }) {
       });
     } else {
       if (existingReviewResponse.Item) {
-        console.log(`[${requestId}] 📊 Item existant sans critique (valeur uniquement)`);
       } else {
-        console.log(`[${requestId}] 📝 Aucun item existant`);
       }
       return new Response(JSON.stringify({ 
         review: null,
@@ -81,12 +74,10 @@ export async function POST(req, { params }) {
   const startTime = Date.now();
   const requestId = Math.random().toString(36).substring(7);
   
-  console.log(`[${requestId}] 🚀 Début génération critique - ${new Date().toISOString()}`);
   
   const cookieStore = await cookies();
   const session = await getSession(req, { cookies: cookieStore });
   if (!session || !session.user) {
-    console.log(`[${requestId}] ❌ Non authentifié`);
     return new Response(JSON.stringify({ error: 'Non authentifié' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -96,11 +87,9 @@ export async function POST(req, { params }) {
   const userId = session.user.sub;
   const { id } = await params;
   
-  console.log(`[${requestId}] 👤 Utilisateur: ${userId}, Album: ${id}`);
 
   try {
     // Vérifier si une critique existe déjà pour cet album et cet utilisateur
-    console.log(`[${requestId}] 🔍 Vérification critique existante...`);
     const getReviewCommand = new GetCommand({
       TableName: "AlbumReviews",
       Key: { 
@@ -112,7 +101,6 @@ export async function POST(req, { params }) {
     const existingReviewResponse = await docClient.send(getReviewCommand);
 
     if (existingReviewResponse.Item && existingReviewResponse.Item.review) {
-      console.log(`[${requestId}] ✅ Critique existante trouvée, retour direct`);
       return new Response(JSON.stringify({ 
         review: existingReviewResponse.Item.review,
         rating: existingReviewResponse.Item.rating,
@@ -130,13 +118,10 @@ export async function POST(req, { params }) {
     }
 
     if (existingReviewResponse.Item) {
-      console.log(`[${requestId}] 📊 Item existant sans critique (valeur uniquement), génération nécessaire`);
     } else {
-      console.log(`[${requestId}] 📝 Aucun item existant, génération nécessaire`);
     }
 
     // Récupérer les identifiants Discogs
-    console.log(`[${requestId}] 🔑 Récupération identifiants Discogs...`);
     const getCommand = new GetCommand({
       TableName: "UserDiscogsCredentials",
       Key: { userId },
@@ -145,7 +130,6 @@ export async function POST(req, { params }) {
     const response = await docClient.send(getCommand);
     
     if (!response.Item) {
-      console.log(`[${requestId}] ❌ Identifiants Discogs non trouvés`);
       return new Response(JSON.stringify({ error: 'Identifiants Discogs non trouvés' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -153,16 +137,12 @@ export async function POST(req, { params }) {
     }
 
     const { discogsToken } = response.Item;
-    console.log(`[${requestId}] ✅ Identifiants Discogs récupérés`);
 
     // Récupérer les détails de l'album depuis Discogs
-    console.log(`[${requestId}] 🎵 Récupération détails album depuis Discogs...`);
     const dis = new Discogs.Client({ userToken: discogsToken });
     let albumDetails;
     
     try {
-      const discogsStartTime = Date.now();
-      
       // Timeout de 30 secondes pour Discogs
       const discogsTimeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Timeout Discogs')), 30000);
@@ -171,11 +151,7 @@ export async function POST(req, { params }) {
       const discogsPromise = dis.database().getRelease(id);
       
       albumDetails = await Promise.race([discogsPromise, discogsTimeoutPromise]);
-      const discogsDuration = Date.now() - discogsStartTime;
-      console.log(`[${requestId}] ✅ Détails Discogs récupérés en ${discogsDuration}ms`);
-      console.log(`[${requestId}] 📊 Album: ${albumDetails.title} - ${albumDetails.artists?.length || 0} artistes`);
     } catch (discogsError) {
-      console.error(`[${requestId}] ❌ Erreur Discogs:`, discogsError);
       
       if (discogsError.message.includes('Timeout')) {
         throw new Error('La récupération des détails de l\'album a pris trop de temps. Veuillez réessayer.');
@@ -191,19 +167,14 @@ export async function POST(req, { params }) {
     }
 
     // Validation des données essentielles
-    console.log(`[${requestId}] ✅ Validation des données album...`);
     if (!albumDetails.title) {
-      console.log(`[${requestId}] ❌ Titre de l'album manquant`);
       throw new Error('Titre de l\'album manquant');
     }
     if (!albumDetails.artists || albumDetails.artists.length === 0) {
-      console.log(`[${requestId}] ❌ Informations artiste manquantes`);
       throw new Error('Informations artiste manquantes');
     }
-    console.log(`[${requestId}] ✅ Données album validées`);
 
     // Initialiser Google Gemini
-    console.log(`[${requestId}] 🤖 Initialisation Google Gemini...`);
     
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
       throw new Error('Clé API Google Gemini manquante');
@@ -211,7 +182,7 @@ export async function POST(req, { params }) {
     
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       generationConfig: {
         temperature: 0.3, // Plus déterministe pour des critiques cohérentes
         topK: 20, // Plus restrictif pour un vocabulaire précis
@@ -221,7 +192,6 @@ export async function POST(req, { params }) {
     });
 
     // Créer le prompt pour la critique avec gestion des données manquantes
-    console.log(`[${requestId}] 📝 Création du prompt...`);
     const safeGetValue = (value, fallback = 'Non spécifié') => {
       if (!value || (Array.isArray(value) && value.length === 0)) {
         return fallback;
@@ -246,8 +216,19 @@ STRUCTURE OBLIGATOIRE (mais n'affiche pas cette structure dans la critique, rest
 2. ÉVALUATION TECHNIQUE : Composition, arrangements, production, performances instrumentales
 3. COHÉRENCE ARTISTIQUE : L'album tient-il ses promesses ? Y a-t-il des failles conceptuelles ?
 4. INNOVATION vs CONFORMISME : Apporte-t-il quelque chose de nouveau ou recycle-t-il des clichés ?
-5. VERDICT FINAL : Impact émotionnel et intellectuel, place dans la discographie de l'artiste
+5. VERDICT FINAL : Impact, influence, place dans la discographie de l'artiste
 6. RECOMMANDATION : Quel album majeur permettrait d'aller plus loin ?
+
+IMPORTANT : À la fin de ta critique, ajoute une section structurée :
+"ALBUM RECOMMANDÉ : [Titre de l'album] - [Artiste] ([Année])"
+
+FORMAT STRICT pour l'album recommandé :
+- Pas d'astérisques (*) dans le titre
+- Pas de guillemets autour du titre
+- Pas de caractères spéciaux de formatage
+- Titre exact de l'album tel qu'il apparaît sur les plateformes
+- Exemple correct : "ALBUM RECOMMANDÉ : Kind of Blue - Miles Davis (1959)"
+- Exemple incorrect : "ALBUM RECOMMANDÉ : *Kind of Blue* - Miles Davis (1959)"
 
 ÉCHELLE DE NOTATION STRICTE :
 - 9.0-10.0 : RÉVOLUTIONNAIRE - Redéfinit le genre, influence durable, perfection technique et artistique
@@ -271,15 +252,11 @@ EXIGENCES CRITIQUES :
 
 TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un vocabulaire riche et précis.`;
 
-    console.log(`[${requestId}] ✅ Prompt créé (${prompt.length} caractères)`);
 
     // Générer la critique avec Gemini avec timeout
-    console.log(`[${requestId}] ✍️ Génération critique avec Gemini...`);
     let result, review, rating;
     
     try {
-      const geminiStartTime = Date.now();
-      
       // Timeout de 45 secondes pour la génération
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Timeout de génération Gemini')), 45000);
@@ -289,9 +266,6 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
       
       result = await Promise.race([generationPromise, timeoutPromise]);
       review = result.response.text();
-      
-      const geminiDuration = Date.now() - geminiStartTime;
-      console.log(`[${requestId}] ✅ Critique générée en ${geminiDuration}ms, longueur: ${review.length} caractères`);
       
       if (review.length < 50) {
         throw new Error('Critique générée trop courte, probablement incomplète');
@@ -338,7 +312,6 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
       rating = 5.0; // Note par défaut si aucune n'est trouvée
     }
     
-    console.log(`Note extraite pour ${id}: ${rating}`);
 
     // Vérifier s'il existe déjà des données pour cet album et cet utilisateur
     const getExistingCommand = new GetCommand({
@@ -391,11 +364,7 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
       Item: itemToSave
     });
 
-    console.log(`[${requestId}] 💾 Sauvegarde critique en base...`);
     await docClient.send(putReviewCommand);
-
-    const totalDuration = Date.now() - startTime;
-    console.log(`[${requestId}] 🎉 Critique générée et sauvegardée avec succès en ${totalDuration}ms`);
 
     return new Response(JSON.stringify({ 
       review: review,

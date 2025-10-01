@@ -33,7 +33,7 @@ async function diagnoseReviewIssues() {
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       generationConfig: {
         temperature: 0.7,
         topK: 40,
@@ -114,7 +114,7 @@ Termine par "Note : X.X/10"`;
   
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const dis = new Discogs.Client({ userToken: process.env.DISCOGS_USER_TOKEN });
     
     const startTime = Date.now();

@@ -118,7 +118,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const fetchAlbumRatings = useCallback(async () => {
     try {
       const ratings = {};
-      console.log(`Récupération des notes existantes pour ${discogsCollection.length} albums...`);
       
       for (const release of discogsCollection) {
         try {
@@ -133,7 +132,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
             const data = await response.json();
             if (data.rating && data.rating > 0) {
               ratings[release.id] = data.rating;
-              console.log(`Note trouvée: ${data.rating}/10 pour ${release.basic_information.title}`);
             }
           }
         } catch {
@@ -141,7 +139,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
         }
       }
       setAlbumRatings(ratings);
-      console.log(`Notes récupérées: ${Object.keys(ratings).length} albums avec des critiques`);
     } catch (error) {
       console.error('Erreur lors de la récupération des notes:', error);
     }
@@ -150,7 +147,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const fetchStoredValues = useCallback(async () => {
     try {
       const values = {};
-      console.log(`Récupération des valeurs stockées pour ${discogsCollection.length} albums...`);
       
       for (const release of discogsCollection) {
         try {
@@ -165,7 +161,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
             const data = await response.json();
             if (data.estimatedValue) {
               values[release.id] = data.estimatedValue;
-              console.log(`Valeur trouvée: ${data.estimatedValue} € pour ${release.basic_information.title}`);
             }
           }
         } catch {
@@ -176,7 +171,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       if (Object.keys(values).length > 0) {
         setValuesEnabled(true);
       }
-      console.log(`Valeurs stockées récupérées: ${Object.keys(values).length} albums avec des valeurs`);
     } catch (error) {
       console.error('Erreur lors de la récupération des valeurs stockées:', error);
     }
@@ -204,8 +198,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       const values = {...albumValues}; // Commencer avec les valeurs existantes
       
       // Récupérer les valeurs pour tous les albums de la collection
-      const action = forceUpdate ? 'mise à jour' : 'récupération et sauvegarde';
-      console.log(`${action} des valeurs pour ${discogsCollection.length} albums...`);
       setValuesProgress({ current: 0, total: discogsCollection.length });
       
       for (let i = 0; i < discogsCollection.length; i++) {
@@ -213,7 +205,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
         
         // Si on ne force pas la mise à jour et qu'on a déjà une valeur, on peut la garder
         if (!forceUpdate && values[release.id]) {
-          console.log(`Valeur existante conservée: ${values[release.id]} € pour ${release.basic_information.title}`);
           setValuesProgress({ current: i + 1, total: discogsCollection.length });
           continue;
         }
@@ -232,7 +223,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
               const data = await response.json();
               if (data.estimatedValue) {
                 values[release.id] = data.estimatedValue;
-                console.log(`Valeur ${forceUpdate ? 'mise à jour' : 'sauvegardée'}: ${data.estimatedValue} € pour ${release.basic_information.title}`);
               }
             } catch (jsonError) {
               console.warn(`Réponse JSON invalide pour l'album ${release.id}:`, jsonError.message);
@@ -279,7 +269,6 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       setAlbumValues(values);
       setValuesEnabled(true);
       setLastValuesUpdate(new Date().toLocaleString('fr-FR'));
-      console.log(`Valeurs ${forceUpdate ? 'mises à jour' : 'récupérées et sauvegardées'}: ${Object.keys(values).length} albums avec des valeurs`);
     } catch (error) {
       console.error('Erreur lors de la récupération des valeurs:', error);
       setValueError('Erreur lors de la récupération des valeurs des albums');
@@ -439,6 +428,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
           </div>
         </div>
       )}
+
 
       {isLoading && <p className="dark:text-white">Chargement de votre collection...</p>}
       {error && <p className="text-red-500 dark:text-red-400">Erreur : {error}</p>}

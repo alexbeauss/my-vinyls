@@ -31,7 +31,7 @@
 **Solutions :**
 - Vérifiez `GOOGLE_GEMINI_API_KEY` dans Vercel
 - Vérifiez votre quota sur [Google AI Studio](https://aistudio.google.com/)
-- Le modèle `gemini-1.5-flash` est optimisé pour la vitesse
+- Le modèle `gemini-2.0-flash` est le modèle actuel recommandé pour les critiques
 
 ### 3. Erreurs d'API Discogs
 
