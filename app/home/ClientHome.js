@@ -176,6 +176,32 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     }
   }, [discogsCollection]);
 
+  // Fonction pour actualiser uniquement les albums aléatoires
+  const refreshRandomAlbums = useCallback(() => {
+    if (discogsCollection.length === 0) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const storedAlbums = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('randomAlbums') || 'null') : null;
+
+    // Si les albums stockés ne sont pas de la date du jour, on les actualise
+    if (!storedAlbums || storedAlbums.date !== today) {
+      const randomAlbums = [];
+      const usedIndices = new Set();
+      while (randomAlbums.length < 3 && usedIndices.size < discogsCollection.length) {
+        const randomIndex = Math.floor(Math.random() * discogsCollection.length);
+        if (!usedIndices.has(randomIndex)) {
+          randomAlbums.push(discogsCollection[randomIndex]);
+          usedIndices.add(randomIndex);
+        }
+      }
+      setRandomAlbum(randomAlbums);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
+      }
+      console.log('Albums "À écouter aujourd\'hui" actualisés pour le', today);
+    }
+  }, [discogsCollection]);
+
   // useEffect pour charger les données initiales
   useEffect(() => {
     fetchDiscogsData();
@@ -188,6 +214,43 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       fetchStoredValues();
     }
   }, [discogsCollection, fetchAlbumRatings, fetchStoredValues]);
+
+  // useEffect pour vérifier périodiquement si la date a changé et actualiser les albums
+  useEffect(() => {
+    if (discogsCollection.length === 0) return;
+
+    // Fonction pour calculer le temps jusqu'à minuit
+    const getTimeUntilMidnight = () => {
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0);
+      return midnight - now;
+    };
+
+    // Vérifier immédiatement au montage du composant
+    refreshRandomAlbums();
+
+    // Planifier une vérification à minuit
+    const timeoutUntilMidnight = setTimeout(() => {
+      refreshRandomAlbums();
+      // Après minuit, vérifier toutes les heures au cas où
+      const hourlyInterval = setInterval(() => {
+        refreshRandomAlbums();
+      }, 60 * 60 * 1000); // Toutes les heures
+      
+      return () => clearInterval(hourlyInterval);
+    }, getTimeUntilMidnight());
+
+    // Vérifier aussi toutes les 10 minutes (au cas où l'ordinateur se réveille après minuit)
+    const regularCheckInterval = setInterval(() => {
+      refreshRandomAlbums();
+    }, 10 * 60 * 1000); // Toutes les 10 minutes
+
+    return () => {
+      clearTimeout(timeoutUntilMidnight);
+      clearInterval(regularCheckInterval);
+    };
+  }, [discogsCollection, refreshRandomAlbums]);
 
   const fetchAlbumValues = async (forceUpdate = false) => {
     if (isLoadingValues) return; // Éviter les appels multiples
