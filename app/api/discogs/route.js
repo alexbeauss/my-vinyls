@@ -5,9 +5,9 @@ import { docClient } from '../../lib/awsConfig';
 import Discogs from 'disconnect';
 import axios from 'axios';
 
-export async function GET() {
+export async function GET(request) {
   const cookieStore = await cookies();
-  const session = await getSession({ cookies: cookieStore });
+  const session = await getSession(request, { cookies: cookieStore });
   if (!session || !session.user) {
     return new Response(JSON.stringify({ error: 'Not authentifié' }), {
       status: 401,
@@ -34,24 +34,60 @@ export async function GET() {
 
     const { discogsUsername, discogsToken } = response.Item;
 
-    // Récupérer toutes les pages de la collection
+    // Récupérer TOUS les folders
     const dis = new Discogs.Client({ userToken: discogsToken });
-    let allReleases = [];
-    let page = 1;
-    let hasMorePages = true;
-
-    while (hasMorePages) {
-      const pageData = await dis.user().collection().getReleases(discogsUsername, 0, {
-        page: page,
-        per_page: 100
-      });
-
-      allReleases = [...allReleases, ...pageData.releases];
-      
-      // Vérifier s'il y a plus de pages
-      hasMorePages = pageData.pagination.page < pageData.pagination.pages;
-      page++;
+    const foldersData = await dis.user().collection().getFolders(discogsUsername);
+    
+    // Normaliser la structure des folders
+    let folders = [];
+    if (Array.isArray(foldersData)) {
+      folders = foldersData;
+    } else if (foldersData && foldersData.folders && Array.isArray(foldersData.folders)) {
+      folders = foldersData.folders;
     }
+    
+    console.log('Chargement de tous les dossiers:', folders.length);
+
+    // Récupérer tous les albums avec leur folder_id
+    let allReleases = [];
+    
+    for (const folder of folders) {
+      if (!folder || !folder.id) {
+        console.error('Folder invalide:', folder);
+        continue;
+      }
+      
+      let page = 1;
+      let hasMorePages = true;
+
+      while (hasMorePages) {
+        try {
+          const pageData = await dis.user().collection().getReleases(discogsUsername, folder.id, {
+            page: page,
+            per_page: 100
+          });
+
+          // Ajouter le folder_id à chaque release
+          const releasesWithFolder = pageData.releases.map(release => ({
+            ...release,
+            folder_id: folder.id
+          }));
+
+          allReleases = [...allReleases, ...releasesWithFolder];
+          
+          // Vérifier s'il y a plus de pages
+          hasMorePages = pageData.pagination.page < pageData.pagination.pages;
+          page++;
+        } catch (pageError) {
+          console.error(`Erreur pour le dossier ${folder.id}:`, pageError);
+          break;
+        }
+      }
+      
+      console.log(`Dossier ${folder.name}: ${allReleases.filter(r => r.folder_id === folder.id).length} albums`);
+    }
+    
+    console.log(`Total: ${allReleases.length} albums de tous les dossiers`);
 
     // Récupérer la valeur de la collection
     const collectionValueResponse = await axios.get(`https://api.discogs.com/users/${discogsUsername}/collection/value`, {

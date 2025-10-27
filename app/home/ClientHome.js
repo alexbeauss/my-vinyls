@@ -20,6 +20,9 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [valuesEnabled, setValuesEnabled] = useState(false);
   const [valuesProgress, setValuesProgress] = useState({ current: 0, total: 0 });
   const [lastValuesUpdate, setLastValuesUpdate] = useState(null);
+  const [folders, setFolders] = useState([]);
+  const [selectedFolder, setSelectedFolder] = useState('0');
+  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
 
   // Fonction pour mettre à jour les données d'un album spécifique
   const updateAlbumData = async (albumId) => {
@@ -70,9 +73,58 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     updateAlbumData
   }));
 
+  const fetchFolders = async () => {
+    setIsLoadingFolders(true);
+    try {
+      const response = await fetch('/api/discogs/folders');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Folders reçus:', data);
+        setFolders(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Erreur HTTP lors de la récupération des folders:', response.status);
+      }
+    } catch (err) {
+      console.error('Erreur lors de la récupération des folders:', err);
+    } finally {
+      setIsLoadingFolders(false);
+    }
+  };
+
+  const generateRandomAlbums = (albumsToUse, folder) => {
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `randomAlbums_folder_${folder}`;
+    
+    // Vérifier s'il y a déjà des albums en cache pour ce dossier aujourd'hui
+    if (typeof window !== 'undefined') {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      if (stored && stored.date === today && stored.albums && stored.albums.length > 0) {
+        setRandomAlbum(stored.albums);
+        return;
+      }
+    }
+    
+    // Pas de cache ou date différente, générer de nouveaux albums
+    const randomAlbums = [];
+    const usedIndices = new Set();
+    while (randomAlbums.length < 3 && usedIndices.size < albumsToUse.length) {
+      const randomIndex = Math.floor(Math.random() * albumsToUse.length);
+      if (!usedIndices.has(randomIndex)) {
+        randomAlbums.push(albumsToUse[randomIndex]);
+        usedIndices.add(randomIndex);
+      }
+    }
+    
+    setRandomAlbum(randomAlbums);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify({ date: today, albums: randomAlbums }));
+    }
+  };
+
   const fetchDiscogsData = async () => {
     setIsLoading(true);
     try {
+      // Charger TOUTE la collection (tous les albums de tous les dossiers)
       const response = await fetch('/api/discogs');
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des données Discogs');
@@ -84,30 +136,16 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
         throw new Error('Format de données incorrect');
       }
 
+      // Stocker toute la collection
       setDiscogsCollection(data.releases || []);
       setCollectionValue(data.collectionValue);
-
-      // Gestion des albums aléatoires
-      const today = new Date().toISOString().split('T')[0];
-      const storedAlbums = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('randomAlbums') || 'null') : null;
-
-      if (storedAlbums && storedAlbums.date === today) {
-        setRandomAlbum(storedAlbums.albums);
-      } else {
-        const randomAlbums = [];
-        const usedIndices = new Set();
-        while (randomAlbums.length < 3 && usedIndices.size < data.releases.length) {
-          const randomIndex = Math.floor(Math.random() * data.releases.length);
-          if (!usedIndices.has(randomIndex)) {
-            randomAlbums.push(data.releases[randomIndex]);
-            usedIndices.add(randomIndex);
-          }
-        }
-        setRandomAlbum(randomAlbums);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
-        }
+      
+      // Filtrer selon le dossier sélectionné pour générer les albums aléatoires
+      if (data.releases && data.releases.length > 0) {
+        const filtered = applyFiltersToCollection(data.releases, selectedFolder);
+        generateRandomAlbums(filtered, selectedFolder);
       }
+      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -181,31 +219,85 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     if (discogsCollection.length === 0) return;
     
     const today = new Date().toISOString().split('T')[0];
-    const storedAlbums = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('randomAlbums') || 'null') : null;
-
-    // Si les albums stockés ne sont pas de la date du jour, on les actualise
-    if (!storedAlbums || storedAlbums.date !== today) {
-      const randomAlbums = [];
-      const usedIndices = new Set();
-      while (randomAlbums.length < 3 && usedIndices.size < discogsCollection.length) {
-        const randomIndex = Math.floor(Math.random() * discogsCollection.length);
-        if (!usedIndices.has(randomIndex)) {
-          randomAlbums.push(discogsCollection[randomIndex]);
-          usedIndices.add(randomIndex);
-        }
+    const storageKey = `randomAlbums_folder_${selectedFolder}`;
+    
+    // Vérifier d'abord s'il y a déjà des albums en cache
+    if (typeof window !== 'undefined') {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
+      if (stored && stored.date === today && stored.albums && stored.albums.length > 0) {
+        setRandomAlbum(stored.albums);
+        return;
       }
-      setRandomAlbum(randomAlbums);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('randomAlbums', JSON.stringify({ date: today, albums: randomAlbums }));
-      }
-      console.log('Albums "À écouter aujourd\'hui" actualisés pour le', today);
     }
-  }, [discogsCollection]);
+    
+    // Pas de cache, générer de nouveaux albums
+    const filtered = applyFiltersToCollection(discogsCollection, selectedFolder);
+    
+    const randomAlbums = [];
+    const usedIndices = new Set();
+    while (randomAlbums.length < 3 && usedIndices.size < filtered.length) {
+      const randomIndex = Math.floor(Math.random() * filtered.length);
+      if (!usedIndices.has(randomIndex)) {
+        randomAlbums.push(filtered[randomIndex]);
+        usedIndices.add(randomIndex);
+      }
+    }
+    setRandomAlbum(randomAlbums);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(storageKey, JSON.stringify({ date: today, albums: randomAlbums }));
+    }
+  }, [discogsCollection, selectedFolder]);
 
-  // useEffect pour charger les données initiales
+  // useEffect pour charger les folders
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  // useEffect pour charger les données au démarrage
   useEffect(() => {
     fetchDiscogsData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fonction pour appliquer tous les filtres (genres + dossier)
+  const applyFiltersToCollection = (collection, folderId = selectedFolder) => {
+    let filtered = collection;
+    
+    // Filtre par dossier
+    if (folderId !== '0') {
+      filtered = filtered.filter(album => {
+        // Gérer les cas où folder_id peut être un string ou un nombre
+        const albumFolderId = String(album.folder_id);
+        const searchFolderId = String(folderId);
+        return albumFolderId === searchFolderId;
+      });
+    }
+    
+    // Filtre par genres
+    if (genreFilters.length > 0) {
+      filtered = filtered.filter(album => 
+        album.basic_information.styles && 
+        album.basic_information.styles.some(style => genreFilters.includes(style))
+      );
+    }
+    
+    return filtered;
+  };
+
+  // Fonction pour changer de folder
+  const handleFolderChange = (folderId) => {
+    setSelectedFolder(folderId);
+    setCarouselIndex(0); // Réinitialiser le carousel à la première position
+    
+    // Générer ou récupérer les albums aléatoires pour le carrousel
+    if (discogsCollection.length > 0) {
+      const filtered = applyFiltersToCollection(discogsCollection, folderId);
+      generateRandomAlbums(filtered, folderId);
+    } else {
+      // Si pas d'albums, vider le carrousel temporairement
+      setRandomAlbum([]);
+    }
+  };
 
   // useEffect pour charger les notes et valeurs quand la collection change
   useEffect(() => {
@@ -250,7 +342,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       clearTimeout(timeoutUntilMidnight);
       clearInterval(regularCheckInterval);
     };
-  }, [discogsCollection, refreshRandomAlbums]);
+  }, [discogsCollection, refreshRandomAlbums, selectedFolder]);
 
   const fetchAlbumValues = async (forceUpdate = false) => {
     if (isLoadingValues) return; // Éviter les appels multiples
@@ -374,12 +466,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   };
 
   const sortedAndFilteredReleases = discogsCollection ? 
-    [...discogsCollection] // Création d'une copie du tableau pour éviter la mutation
-      .filter(release => 
-        genreFilters.length === 0 || 
-        (release.basic_information.styles && 
-         release.basic_information.styles.some(style => genreFilters.includes(style)))
-      )
+    applyFiltersToCollection([...discogsCollection], selectedFolder) // Appliquer tous les filtres (genres + dossier)
       .sort((a, b) => {
         if (sortBy === 'artist') {
           const artistA = a.basic_information.artists[0].name.toLowerCase();
@@ -429,7 +516,34 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       {/* Section "À écouter aujourd'hui" transformée en carrousel */}
       {randomAlbum && randomAlbum.length > 0 && (
         <div className="mb-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
-          <h2 className="text-3xl font-bold mb-4 dark:text-white">À écouter aujourd&apos;hui</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-3xl font-bold dark:text-white">À écouter aujourd&apos;hui</h2>
+            <div className="flex items-center gap-2">
+              <label htmlFor="folder-select" className="text-sm font-medium dark:text-gray-300">
+                Dossier:
+              </label>
+              {isLoadingFolders ? (
+                <span className="text-sm text-gray-600 dark:text-gray-400">Chargement...</span>
+              ) : (
+                <select
+                  id="folder-select"
+                  value={selectedFolder}
+                  onChange={(e) => handleFolderChange(e.target.value)}
+                  className="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                >
+                  {folders.length > 0 ? (
+                    folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.name} {folder.count !== undefined ? `(${folder.count})` : ''}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="0">Tous (par défaut)</option>
+                  )}
+                </select>
+              )}
+            </div>
+          </div>
           <div className="flex items-center justify-between">
             <button onClick={handlePrev} className="text-lg font-bold dark:text-white">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
