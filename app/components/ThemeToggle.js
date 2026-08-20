@@ -15,11 +15,11 @@ export default function ThemeToggle() {
     <select 
       value={theme} 
       onChange={e => setTheme(e.target.value)}
-      className="bg-white dark:bg-gray-800 text-gray-800 dark:text-white border border-gray-300 dark:border-gray-600 rounded px-2 py-1"
+      className="bg-white/10 hover:bg-white/20 text-white border border-white/30 rounded-full px-3 py-1 text-sm cursor-pointer transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-white/50"
     >
-      <option value="system">Système</option>
-      <option value="dark">Sombre</option>
-      <option value="light">Clair</option>
+      <option value="system" className="bg-gray-800 text-white">Système</option>
+      <option value="dark" className="bg-gray-800 text-white">Sombre</option>
+      <option value="light" className="bg-gray-800 text-white">Clair</option>
     </select>
   )
 }

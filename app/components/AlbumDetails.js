@@ -15,6 +15,7 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
   const [recommendedAlbum, setRecommendedAlbum] = useState(null);
   const [appleMusicData, setAppleMusicData] = useState(null);
   const [isLoadingAppleMusic, setIsLoadingAppleMusic] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const handleDataUpdate = useCallback((id) => {
     if (onDataUpdate) {
@@ -131,11 +132,9 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
       setReview(data.review);
       setRating(data.rating);
       
-      // Extraire l'album recommandé de la critique
-      const recommended = extractRecommendedAlbum(data.review);
+      const recommended = data.recommendedAlbum || extractRecommendedAlbum(data.review);
       setRecommendedAlbum(recommended);
       
-      // Récupérer les données Apple Music si un album est recommandé
       if (recommended) {
         fetchAppleMusicData(recommended);
       }
@@ -246,11 +245,9 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
             setReview(data.review);
             setRating(data.rating);
             
-            // Extraire l'album recommandé de la critique existante
-            const recommended = extractRecommendedAlbum(data.review);
+            const recommended = data.recommendedAlbum || extractRecommendedAlbum(data.review);
             setRecommendedAlbum(recommended);
             
-            // Récupérer les données Apple Music si un album est recommandé
             if (recommended) {
               fetchAppleMusicData(recommended);
             }
@@ -294,32 +291,63 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
     return 'bg-red-100 dark:bg-red-900/30';
   };
 
+  const handleShare = async () => {
+    if (!album) return;
+    const discogsUrl = `https://www.discogs.com/release/${albumId}`;
+    const excerpt = review
+      ? review.split(/[.!?]/).slice(0, 2).join('. ').trim() + '.'
+      : '';
+    const text = [
+      `🎵 ${album.title} — ${album.artists[0].name}`,
+      rating ? `Note IA : ${rating.toFixed(1)}/10` : null,
+      excerpt || null,
+      discogsUrl,
+    ].filter(Boolean).join('\n');
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: album.title, text });
+        return;
+      } catch {
+        // fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (err) {
+      console.error('Erreur partage:', err);
+    }
+  };
+
   return (
     <>
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-6 mb-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Image de l'album */}
-          <div className="lg:w-1/3 flex justify-center lg:justify-start">
-            <div className="relative group">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg dark:shadow-2xl p-4 sm:p-6 mb-8">
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+          {/* Image de l'album — sticky sur desktop */}
+          <div className="lg:w-1/3 flex justify-center lg:justify-start lg:items-start">
+            <div className="relative group lg:sticky lg:top-6">
               <Image
                 src={album.images[0].uri}
                 alt={album.title}
                 width={350}
                 height={350}
-                className="rounded-xl shadow-xl dark:shadow-2xl transition-transform duration-300 group-hover:scale-105"
+                className="rounded-xl shadow-xl dark:shadow-2xl transition-transform duration-300 group-hover:scale-105 w-48 sm:w-64 lg:w-full"
               />
               <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-xl transition-all duration-300"></div>
             </div>
           </div>
           
           {/* Informations de l'album */}
-          <div className="lg:w-2/3 space-y-6">
+          <div className="lg:w-2/3 space-y-4 sm:space-y-6">
             {/* Titre et artiste */}
-            <div className="space-y-2">
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white leading-tight">
+            <div className="space-y-1 sm:space-y-2">
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white leading-tight">
                 {album.title}
               </h1>
-              <p className="text-2xl text-gray-700 dark:text-gray-300 font-medium">
+              <p className="text-lg sm:text-2xl text-gray-700 dark:text-gray-300 font-medium">
                 {album.artists[0].name}
               </p>
             </div>
@@ -473,35 +501,41 @@ export default function AlbumDetails({ albumId, onDataUpdate }) {
                 {review}
               </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
                 <span>Critique générée par Google Gemini</span>
               </div>
-              <button
-                onClick={async () => {
-                  setReview(null);
-                  setRating(null);
-                  // Supprimer la critique existante et en générer une nouvelle
-                  try {
-                    await fetch(`/api/album/${albumId}/review`, {
-                      method: 'DELETE',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                    });
-                    // Générer une nouvelle critique
-                    await generateReview();
-                  } catch (err) {
-                    console.error('Erreur lors de la régénération:', err);
-                  }
-                }}
-                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                Régénérer
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleShare}
+                  className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors font-medium"
+                >
+                  {shareCopied ? 'Copié !' : 'Partager'}
+                </button>
+                <button
+                  onClick={async () => {
+                    setReview(null);
+                    setRating(null);
+                    try {
+                      await fetch(`/api/album/${albumId}/review`, {
+                        method: 'DELETE',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                      });
+                      await generateReview();
+                    } catch (err) {
+                      console.error('Erreur lors de la régénération:', err);
+                    }
+                  }}
+                  className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                >
+                  Régénérer
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -4,6 +4,7 @@ import { GetCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from '../../../../lib/awsConfig';
 import Discogs from 'disconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODELS } from '../../../../lib/geminiConfig';
 
 export async function GET(req, { params }) {
   const requestId = Math.random().toString(36).substring(7);
@@ -36,6 +37,7 @@ export async function GET(req, { params }) {
       return new Response(JSON.stringify({ 
         review: existingReviewResponse.Item.review,
         rating: existingReviewResponse.Item.rating,
+        recommendedAlbum: existingReviewResponse.Item.recommendedAlbum || null,
         albumInfo: {
           title: existingReviewResponse.Item.albumTitle,
           artists: [existingReviewResponse.Item.albumArtist],
@@ -48,12 +50,10 @@ export async function GET(req, { params }) {
         headers: { 'Content-Type': 'application/json' },
       });
     } else {
-      if (existingReviewResponse.Item) {
-      } else {
-      }
       return new Response(JSON.stringify({ 
         review: null,
         rating: null,
+        recommendedAlbum: null,
         albumInfo: null
       }), {
         status: 200,
@@ -182,16 +182,15 @@ export async function POST(req, { params }) {
     
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODELS.REVIEW,
       generationConfig: {
-        temperature: 0.3, // Plus déterministe pour des critiques cohérentes
-        topK: 20, // Plus restrictif pour un vocabulaire précis
-        topP: 0.8, // Plus focalisé sur les meilleures options
-        maxOutputTokens: 1200, // Plus d'espace pour des analyses détaillées
+        responseMimeType: 'application/json',
+        // gemini-3.5-flash a le "thinking" activé par défaut (medium) :
+        // une partie du budget tokens part dans le raisonnement.
+        maxOutputTokens: 8192,
       }
     });
 
-    // Créer le prompt pour la critique avec gestion des données manquantes
     const safeGetValue = (value, fallback = 'Non spécifié') => {
       if (!value || (Array.isArray(value) && value.length === 0)) {
         return fallback;
@@ -202,72 +201,111 @@ export async function POST(req, { params }) {
       return value;
     };
 
-    const prompt = `Tu es un critique musical exigent, rédacteur en chef de Pitchfork avec 20 ans d'expérience. Tu as écrit pour Rolling Stone, NME, et The Quietus. Tu es connu pour ton exigence et tes analyses sans concession mais également pour ton amour absolu de la musique. Écris une critique musicale de 250-350 mots en français :
+    const trackPreview = albumDetails.tracklist && albumDetails.tracklist.length > 0
+      ? albumDetails.tracklist.slice(0, 5).map((track) => track.title).join(', ') +
+        (albumDetails.tracklist.length > 5 ? ` + ${albumDetails.tracklist.length - 5} autres` : '')
+      : 'Non disponible';
 
-ALBUM: ${albumDetails.title} - ${safeGetValue(albumDetails.artists)} (${albumDetails.year || 'Année inconnue'})
-GENRE: ${safeGetValue(albumDetails.genres)} | STYLE: ${safeGetValue(albumDetails.styles)}
-TRACKS: ${albumDetails.tracklist && albumDetails.tracklist.length > 0 ? 
-  albumDetails.tracklist.slice(0, 5).map(track => track.title).join(', ') + 
-  (albumDetails.tracklist.length > 5 ? ` + ${albumDetails.tracklist.length - 5} autres` : '') 
-  : 'Non disponible'}
+    const prompt = `Tu es un critique musical français exigeant (ton Les Inrocks / Magic) : précis, incarné, sans jargon creux.
 
-STRUCTURE OBLIGATOIRE (mais n'affiche pas cette structure dans la critique, reste littéraire et non structurée) :
-1. ANALYSE DE L'INTENTION : Que cherche à accomplir cet album ? Quelle est sa vision artistique ?
-2. ÉVALUATION TECHNIQUE : Composition, arrangements, production, performances instrumentales
-3. COHÉRENCE ARTISTIQUE : L'album tient-il ses promesses ? Y a-t-il des failles conceptuelles ?
-4. VERDICT FINAL : Impact, influence, place dans la discographie de l'artiste
-5. RECOMMANDATION : Quel album majeur permettrait d'aller plus loin ?
+Écris une critique de 200-280 mots en français sur cet album :
+- Titre : ${albumDetails.title}
+- Artiste(s) : ${safeGetValue(albumDetails.artists)}
+- Année : ${albumDetails.year || 'inconnue'}
+- Genre : ${safeGetValue(albumDetails.genres)}
+- Style : ${safeGetValue(albumDetails.styles)}
+- Pistes (aperçu) : ${trackPreview}
 
-IMPORTANT : À la fin de ta critique, ajoute une section structurée :
-"ALBUM RECOMMANDÉ : [Titre de l'album] - [Artiste] ([Année])"
+Règles :
+- Prose continue uniquement (pas de listes, pas de titres de sections)
+- Base-toi uniquement sur les infos fournies ; n'invente pas d'anecdotes biographiques ni de faits non fournis
+- Évoque l'intention, la forme (composition / production / jeu) et un verdict clair
+- Note : sois avare des 9+ (9+ = chef-d'œuvre rare ; 7-8 = très bon ; 5-6 = moyen ; <5 = faible)
+- recommendedAlbum : un album réel, différent de celui critiqué, qui prolonge l'écoute (titre exact, artiste, année)
 
-FORMAT STRICT pour l'album recommandé :
-- Pas d'astérisques (*) dans le titre
-- Pas de guillemets autour du titre
-- Pas de caractères spéciaux de formatage
-- Titre exact de l'album tel qu'il apparaît sur les plateformes
-- Exemple correct : "ALBUM RECOMMANDÉ : Kind of Blue - Miles Davis (1959)"
-- Exemple incorrect : "ALBUM RECOMMANDÉ : *Kind of Blue* - Miles Davis (1959)"
+Réponds uniquement en JSON avec exactement cette forme :
+{
+  "review": "texte de la critique sans note ni album recommandé à la fin",
+  "rating": 7.4,
+  "recommendedAlbum": {
+    "title": "Titre exact",
+    "artist": "Artiste",
+    "year": 1971
+  }
+}`;
 
-ÉCHELLE DE NOTATION :
-- 9.0-10.0 : CHEF D'OEUVRE - Chef-d'œuvre incontestable avec influence durable, perfection technique et artistique
-- 8.0-8.9 : EXCEPTIONNEL - Chef-d'œuvre avec quelques imperfections mineures, influence majeure
-- 7.0-7.9 : TRÈS BON - Album solide avec des moments brillants, quelques défauts notables
-- 6.0-6.9 : BON - Qualité correcte mais sans éclat particulier, quelques bonnes idées
-- 5.0-5.9 : MOYEN - Compétent mais sans inspiration, remplissage convenable
-- 4.0-4.9 : DÉCEVANT - Problèmes techniques ou artistiques majeurs, raté partiel
-- 3.0-3.9 : MAUVAIS - Échec artistique notable, peu d'intérêt musical
-- 2.0-2.9 : TRÈS MAUVAIS - Presque sans valeur, erreurs grossières
-- 1.0-1.9 : CATASTROPHIQUE - Échec complet, sans aucun mérite
-- 0.0-0.9 : INSUPPORTABLE - Offense à la musique, à éviter absolument
-
-EXIGENCES CRITIQUES :
-- Sois exigent : Un 8/10 doit être justifié par une excellence réelle
-- Analyse technique précise : Production, mixage, arrangements, performances
-- Contextualise : Compare aux références du genre et à l'époque
-- Sois constructif : Même dans la critique, explique pourquoi quelque chose ne fonctionne pas
-- Termine par "Note : X.X/10" avec une décimale précise
-
-TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un vocabulaire riche et précis.`;
-
-
-    // Générer la critique avec Gemini avec timeout
-    let result, review, rating;
+    let review;
+    let rating;
+    let recommendedAlbum = null;
     
     try {
-      // Timeout de 45 secondes pour la génération
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Timeout de génération Gemini')), 45000);
       });
       
       const generationPromise = model.generateContent(prompt);
-      
-      result = await Promise.race([generationPromise, timeoutPromise]);
-      review = result.response.text();
-      
-      if (review.length < 50) {
-        throw new Error('Critique générée trop courte, probablement incomplète');
+      const result = await Promise.race([generationPromise, timeoutPromise]);
+
+      let rawText = '';
+      try {
+        rawText = result.response.text();
+      } catch (textError) {
+        const candidate = result.response?.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+        rawText = parts.map((p) => p.text || '').join('').trim();
+        console.warn(`[${requestId}] response.text() a échoué:`, textError.message, {
+          finishReason: candidate?.finishReason,
+          partsCount: parts.length,
+        });
       }
+
+      if (!rawText) {
+        const finishReason = result.response?.candidates?.[0]?.finishReason;
+        throw new Error(
+          finishReason === 'MAX_TOKENS'
+            ? 'Critique tronquée (limite de tokens). Réessayez.'
+            : `Réponse Gemini vide${finishReason ? ` (${finishReason})` : ''}`
+        );
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error('Réponse Gemini non JSON');
+        }
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+
+      const prose = typeof parsed.review === 'string' ? parsed.review.trim() : '';
+      if (!prose || prose.length < 50) {
+        throw new Error('Critique générée trop courte ou vide');
+      }
+
+      const parsedRating = typeof parsed.rating === 'number'
+        ? parsed.rating
+        : parseFloat(parsed.rating);
+      rating = Number.isFinite(parsedRating)
+        ? Math.min(10, Math.max(0, Math.round(parsedRating * 10) / 10))
+        : 5.0;
+
+      const reco = parsed.recommendedAlbum;
+      if (reco && reco.title && reco.artist) {
+        const yearNum = parseInt(reco.year, 10);
+        recommendedAlbum = {
+          title: String(reco.title).replace(/\*+/g, '').replace(/^["']|["']$/g, '').trim(),
+          artist: String(reco.artist).replace(/\*+/g, '').replace(/^["']|["']$/g, '').trim(),
+          year: Number.isFinite(yearNum) ? yearNum : null,
+        };
+      }
+
+      // Texte stocké / affiché : prose + lignes structurées (compat parsing legacy)
+      const recoLine = recommendedAlbum
+        ? `ALBUM RECOMMANDÉ : ${recommendedAlbum.title} - ${recommendedAlbum.artist}${recommendedAlbum.year ? ` (${recommendedAlbum.year})` : ''}`
+        : null;
+      review = [prose, recoLine, `Note : ${rating.toFixed(1)}/10`].filter(Boolean).join('\n\n');
       
     } catch (geminiError) {
       console.error(`[${requestId}] ❌ Erreur Gemini:`, geminiError);
@@ -283,35 +321,6 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
       }
     }
 
-    // Extraire la note de la critique avec plusieurs patterns
-    const ratingPatterns = [
-      /note[:\s]*(\d+(?:\.\d+)?)\/10/i,
-      /(\d+(?:\.\d+)?)\/10/i,
-      /(\d+(?:\.\d+)?)\s*\/\s*10/i,
-      /(\d+(?:\.\d+)?)\s*sur\s*10/i,
-      /note[:\s]*(\d+(?:\.\d+)?)/i,
-      /(\d+(?:\.\d+)?)\s*\/\s*10/i
-    ];
-    
-    rating = null;
-    for (const pattern of ratingPatterns) {
-      const match = review.match(pattern);
-      if (match) {
-        rating = parseFloat(match[1]);
-        if (rating >= 0 && rating <= 10) {
-          break;
-        }
-      }
-    }
-    
-    // Si aucune note n'est trouvée, essayer de la générer à partir du contexte
-    if (rating === null) {
-      console.warn(`Aucune note trouvée dans la critique pour ${id}, tentative de génération de note par défaut`);
-      rating = 5.0; // Note par défaut si aucune n'est trouvée
-    }
-    
-
-    // Vérifier s'il existe déjà des données pour cet album et cet utilisateur
     const getExistingCommand = new GetCommand({
       TableName: "AlbumReviews",
       Key: { 
@@ -322,7 +331,6 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
 
     const existingItem = await docClient.send(getExistingCommand);
     
-    // Préparer l'item à sauvegarder
     const itemToSave = {
       albumId: id,
       userId: userId,
@@ -336,27 +344,27 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
       updatedAt: new Date().toISOString()
     };
 
-    // Si un item existe déjà, conserver les autres données (comme la valeur estimée)
+    if (recommendedAlbum) {
+      itemToSave.recommendedAlbum = recommendedAlbum;
+    }
+
     if (existingItem.Item) {
-      // Conserver toutes les données existantes sauf review, rating et updatedAt
-      Object.keys(existingItem.Item).forEach(key => {
-        if (key !== 'review' && key !== 'rating' && key !== 'updatedAt') {
+      const preserveKeys = new Set(['review', 'rating', 'recommendedAlbum', 'updatedAt']);
+      Object.keys(existingItem.Item).forEach((key) => {
+        if (!preserveKeys.has(key)) {
           itemToSave[key] = existingItem.Item[key];
         }
       });
       
-      // Conserver la date de création originale
       if (existingItem.Item.createdAt) {
         itemToSave.createdAt = existingItem.Item.createdAt;
       } else {
         itemToSave.createdAt = new Date().toISOString();
       }
     } else {
-      // Si c'est un nouvel item, ajouter la date de création
       itemToSave.createdAt = new Date().toISOString();
     }
 
-    // Sauvegarder la critique en base de données DynamoDB
     const putReviewCommand = new PutCommand({
       TableName: "AlbumReviews",
       Item: itemToSave
@@ -367,6 +375,7 @@ TON : Professionnel, incisif, sans complaisance mais équitable. Utilise un voca
     return new Response(JSON.stringify({ 
       review: review,
       rating: rating || 0,
+      recommendedAlbum,
       albumInfo: {
         title: albumDetails.title,
         artists: albumDetails.artists.map(artist => artist.name),

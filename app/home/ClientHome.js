@@ -1,17 +1,17 @@
 "use client";
 import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import Image from 'next/image';
+import CollectionDashboard from '../components/CollectionDashboard';
+import WishlistPanel from '../components/WishlistPanel';
 
 const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [discogsCollection, setDiscogsCollection] = useState([]);
   const [collectionValue, setCollectionValue] = useState(null);
-  const [randomAlbum, setRandomAlbum] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('artist');
   const [sortOrder, setSortOrder] = useState('asc');
   const [genreFilters, setGenreFilters] = useState([]);
-  const [carouselIndex, setCarouselIndex] = useState(0);
   const [showGenreFilters, setShowGenreFilters] = useState(false);
   const [albumRatings, setAlbumRatings] = useState({});
   const [albumValues, setAlbumValues] = useState({});
@@ -20,9 +20,82 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   const [valuesEnabled, setValuesEnabled] = useState(false);
   const [valuesProgress, setValuesProgress] = useState({ current: 0, total: 0 });
   const [lastValuesUpdate, setLastValuesUpdate] = useState(null);
-  const [folders, setFolders] = useState([]);
-  const [selectedFolder, setSelectedFolder] = useState('0');
-  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [moodLoading, setMoodLoading] = useState(false);
+  const [selectedMood, setSelectedMood] = useState(null);
+  const [moodSuggestions, setMoodSuggestions] = useState([]);
+  const [moodError, setMoodError] = useState(null);
+  const [moodSlide, setMoodSlide] = useState(0);
+  const [viewMode, setViewMode] = useState('collection');
+
+  const MOOD_OPTIONS = [
+    { id: 'moment', label: 'Vinyle du moment', emoji: '✨', featured: true },
+    { id: 'apaise', label: 'Apaisé', emoji: '🌿' },
+    { id: 'enjoue', label: 'Enjoué', emoji: '☀️' },
+    { id: 'reveur', label: 'Rêveur', emoji: '☁️' },
+    { id: 'survolte', label: 'Survolté', emoji: '⚡' },
+    { id: 'nostalgique', label: 'Nostalgique', emoji: '📼' },
+    { id: 'meditatif', label: 'Méditatif', emoji: '🕯' },
+    { id: 'romantique', label: 'Romantique', emoji: '🌹' },
+  ];
+
+  const getMomentContext = () => {
+    const now = new Date();
+    const month = now.getMonth();
+    const seasons = ['hiver', 'hiver', 'printemps', 'printemps', 'printemps', 'été', 'été', 'été', 'automne', 'automne', 'automne', 'hiver'];
+    return {
+      hour: now.getHours(),
+      dayOfWeek: now.toLocaleDateString('fr-FR', { weekday: 'long' }),
+      season: seasons[month],
+    };
+  };
+
+  const buildMoodCollectionPayload = () =>
+    discogsCollection.map((release) => ({
+      id: String(release.id),
+      title: release.basic_information.title,
+      artist: release.basic_information.artists[0].name,
+      genres: release.basic_information.genres || [],
+      styles: release.basic_information.styles || [],
+    }));
+
+  const handleMoodSelect = async (moodId) => {
+    setSelectedMood(moodId);
+    setMoodSuggestions([]);
+    setMoodSlide(0);
+    setMoodError(null);
+    setMoodLoading(true);
+
+    try {
+      const collection = buildMoodCollectionPayload();
+      if (collection.length === 0) {
+        throw new Error('Aucun album dans la collection');
+      }
+
+      const body = {
+        mood: moodId,
+        collection,
+        ...(moodId === 'moment' ? { context: getMomentContext() } : {}),
+      };
+
+      const response = await fetch('/api/mood-suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Erreur lors de la suggestion');
+      }
+
+      const data = await response.json();
+      setMoodSuggestions(data.suggestions || []);
+    } catch (err) {
+      setMoodError(err.message);
+    } finally {
+      setMoodLoading(false);
+    }
+  };
 
   // Fonction pour mettre à jour les données d'un album spécifique
   const updateAlbumData = async (albumId) => {
@@ -73,58 +146,9 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     updateAlbumData
   }));
 
-  const fetchFolders = async () => {
-    setIsLoadingFolders(true);
-    try {
-      const response = await fetch('/api/discogs/folders');
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Folders reçus:', data);
-        setFolders(Array.isArray(data) ? data : []);
-      } else {
-        console.error('Erreur HTTP lors de la récupération des folders:', response.status);
-      }
-    } catch (err) {
-      console.error('Erreur lors de la récupération des folders:', err);
-    } finally {
-      setIsLoadingFolders(false);
-    }
-  };
-
-  const generateRandomAlbums = (albumsToUse, folder) => {
-    const today = new Date().toISOString().split('T')[0];
-    const storageKey = `randomAlbums_folder_${folder}`;
-    
-    // Vérifier s'il y a déjà des albums en cache pour ce dossier aujourd'hui
-    if (typeof window !== 'undefined') {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
-      if (stored && stored.date === today && stored.albums && stored.albums.length > 0) {
-        setRandomAlbum(stored.albums);
-        return;
-      }
-    }
-    
-    // Pas de cache ou date différente, générer de nouveaux albums
-    const randomAlbums = [];
-    const usedIndices = new Set();
-    while (randomAlbums.length < 3 && usedIndices.size < albumsToUse.length) {
-      const randomIndex = Math.floor(Math.random() * albumsToUse.length);
-      if (!usedIndices.has(randomIndex)) {
-        randomAlbums.push(albumsToUse[randomIndex]);
-        usedIndices.add(randomIndex);
-      }
-    }
-    
-    setRandomAlbum(randomAlbums);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(storageKey, JSON.stringify({ date: today, albums: randomAlbums }));
-    }
-  };
-
   const fetchDiscogsData = async () => {
     setIsLoading(true);
     try {
-      // Charger TOUTE la collection (tous les albums de tous les dossiers)
       const response = await fetch('/api/discogs');
       if (!response.ok) {
         throw new Error('Erreur lors de la récupération des données Discogs');
@@ -136,16 +160,8 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
         throw new Error('Format de données incorrect');
       }
 
-      // Stocker toute la collection
       setDiscogsCollection(data.releases || []);
       setCollectionValue(data.collectionValue);
-      
-      // Filtrer selon le dossier sélectionné pour générer les albums aléatoires
-      if (data.releases && data.releases.length > 0) {
-        const filtered = applyFiltersToCollection(data.releases, selectedFolder);
-        generateRandomAlbums(filtered, selectedFolder);
-      }
-      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -214,135 +230,25 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
     }
   }, [discogsCollection]);
 
-  // Fonction pour actualiser uniquement les albums aléatoires
-  const refreshRandomAlbums = useCallback(() => {
-    if (discogsCollection.length === 0) return;
-    
-    const today = new Date().toISOString().split('T')[0];
-    const storageKey = `randomAlbums_folder_${selectedFolder}`;
-    
-    // Vérifier d'abord s'il y a déjà des albums en cache
-    if (typeof window !== 'undefined') {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || 'null');
-      if (stored && stored.date === today && stored.albums && stored.albums.length > 0) {
-        setRandomAlbum(stored.albums);
-        return;
-      }
-    }
-    
-    // Pas de cache, générer de nouveaux albums
-    const filtered = applyFiltersToCollection(discogsCollection, selectedFolder);
-    
-    const randomAlbums = [];
-    const usedIndices = new Set();
-    while (randomAlbums.length < 3 && usedIndices.size < filtered.length) {
-      const randomIndex = Math.floor(Math.random() * filtered.length);
-      if (!usedIndices.has(randomIndex)) {
-        randomAlbums.push(filtered[randomIndex]);
-        usedIndices.add(randomIndex);
-      }
-    }
-    setRandomAlbum(randomAlbums);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(storageKey, JSON.stringify({ date: today, albums: randomAlbums }));
-    }
-  }, [discogsCollection, selectedFolder]);
-
-  // useEffect pour charger les folders
-  useEffect(() => {
-    fetchFolders();
-  }, []);
-
-  // useEffect pour charger les données au démarrage
   useEffect(() => {
     fetchDiscogsData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fonction pour appliquer tous les filtres (genres + dossier)
-  const applyFiltersToCollection = (collection, folderId = selectedFolder) => {
-    let filtered = collection;
-    
-    // Filtre par dossier
-    if (folderId !== '0') {
-      filtered = filtered.filter(album => {
-        // Gérer les cas où folder_id peut être un string ou un nombre
-        const albumFolderId = String(album.folder_id);
-        const searchFolderId = String(folderId);
-        return albumFolderId === searchFolderId;
-      });
-    }
-    
-    // Filtre par genres
-    if (genreFilters.length > 0) {
-      filtered = filtered.filter(album => 
-        album.basic_information.styles && 
-        album.basic_information.styles.some(style => genreFilters.includes(style))
-      );
-    }
-    
-    return filtered;
+  const applyFiltersToCollection = (collection) => {
+    if (genreFilters.length === 0) return collection;
+    return collection.filter(album => 
+      album.basic_information.styles && 
+      album.basic_information.styles.some(style => genreFilters.includes(style))
+    );
   };
 
-  // Fonction pour changer de folder
-  const handleFolderChange = (folderId) => {
-    setSelectedFolder(folderId);
-    setCarouselIndex(0); // Réinitialiser le carousel à la première position
-    
-    // Générer ou récupérer les albums aléatoires pour le carrousel
-    if (discogsCollection.length > 0) {
-      const filtered = applyFiltersToCollection(discogsCollection, folderId);
-      generateRandomAlbums(filtered, folderId);
-    } else {
-      // Si pas d'albums, vider le carrousel temporairement
-      setRandomAlbum([]);
-    }
-  };
-
-  // useEffect pour charger les notes et valeurs quand la collection change
   useEffect(() => {
     if (discogsCollection.length > 0) {
       fetchAlbumRatings();
       fetchStoredValues();
     }
   }, [discogsCollection, fetchAlbumRatings, fetchStoredValues]);
-
-  // useEffect pour vérifier périodiquement si la date a changé et actualiser les albums
-  useEffect(() => {
-    if (discogsCollection.length === 0) return;
-
-    // Fonction pour calculer le temps jusqu'à minuit
-    const getTimeUntilMidnight = () => {
-      const now = new Date();
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0);
-      return midnight - now;
-    };
-
-    // Vérifier immédiatement au montage du composant
-    refreshRandomAlbums();
-
-    // Planifier une vérification à minuit
-    const timeoutUntilMidnight = setTimeout(() => {
-      refreshRandomAlbums();
-      // Après minuit, vérifier toutes les heures au cas où
-      const hourlyInterval = setInterval(() => {
-        refreshRandomAlbums();
-      }, 60 * 60 * 1000); // Toutes les heures
-      
-      return () => clearInterval(hourlyInterval);
-    }, getTimeUntilMidnight());
-
-    // Vérifier aussi toutes les 10 minutes (au cas où l'ordinateur se réveille après minuit)
-    const regularCheckInterval = setInterval(() => {
-      refreshRandomAlbums();
-    }, 10 * 60 * 1000); // Toutes les 10 minutes
-
-    return () => {
-      clearTimeout(timeoutUntilMidnight);
-      clearInterval(regularCheckInterval);
-    };
-  }, [discogsCollection, refreshRandomAlbums, selectedFolder]);
 
   const fetchAlbumValues = async (forceUpdate = false) => {
     if (isLoadingValues) return; // Éviter les appels multiples
@@ -466,7 +372,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
   };
 
   const sortedAndFilteredReleases = discogsCollection ? 
-    applyFiltersToCollection([...discogsCollection], selectedFolder) // Appliquer tous les filtres (genres + dossier)
+    applyFiltersToCollection([...discogsCollection])
       .sort((a, b) => {
         if (sortBy === 'artist') {
           const artistA = a.basic_information.artists[0].name.toLowerCase();
@@ -502,107 +408,138 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
         return 0;
       }) : [];
 
-  const handleNext = () => {
-    setCarouselIndex((prevIndex) => (prevIndex + 1) % 3);
-  };
-
-  const handlePrev = () => {
-    setCarouselIndex((prevIndex) => (prevIndex - 1 + 3) % 3);
+  const exportCollectionCsv = () => {
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Artiste', 'Titre', 'Année', 'Genres', 'Note IA', 'Valeur €'],
+      ...sortedAndFilteredReleases.map((r) => [
+        r.basic_information.artists[0].name,
+        r.basic_information.title,
+        r.basic_information.year ?? '',
+        (r.basic_information.styles || []).join('; '),
+        albumRatings[r.id] != null ? albumRatings[r.id].toFixed(1) : '',
+        albumValues[r.id] ?? '',
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(escape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `my-vinyls-collection-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="container mx-auto px-4 dark:bg-gray-900 dark:text-white">
       
-      {/* Section "À écouter aujourd'hui" transformée en carrousel */}
-      {randomAlbum && randomAlbum.length > 0 && (
+      {/* Quoi écouter — moods + 3 propositions */}
+      {discogsCollection.length > 0 && (
         <div className="mb-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-3xl font-bold dark:text-white">À écouter aujourd&apos;hui</h2>
-            <div className="flex items-center gap-2">
-              <label htmlFor="folder-select" className="text-sm font-medium dark:text-gray-300">
-                Dossier:
-              </label>
-              {isLoadingFolders ? (
-                <span className="text-sm text-gray-600 dark:text-gray-400">Chargement...</span>
-              ) : (
-                <select
-                  id="folder-select"
-                  value={selectedFolder}
-                  onChange={(e) => handleFolderChange(e.target.value)}
-                  className="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
-                >
-                  {folders.length > 0 ? (
-                    folders.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.name} {folder.count !== undefined ? `(${folder.count})` : ''}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="0">Tous (par défaut)</option>
-                  )}
-                </select>
+          <h2 className="text-2xl sm:text-3xl font-bold dark:text-white mb-3">Quoi écouter ?</h2>
+          <div className="flex gap-2 flex-wrap mb-4">
+            {MOOD_OPTIONS.map(({ id, label, emoji, featured }) => (
+              <button
+                key={id}
+                onClick={() => handleMoodSelect(id)}
+                disabled={moodLoading}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 whitespace-nowrap disabled:opacity-50 ${
+                  selectedMood === id
+                    ? featured
+                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md ring-2 ring-purple-300'
+                      : 'bg-blue-500 text-white shadow-sm'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
+                }`}
+              >
+                {emoji} {label}
+              </button>
+            ))}
+          </div>
+
+          {moodLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 py-2">
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              {selectedMood === 'moment'
+                ? 'Gemini cherche 3 vinyles pour ce moment...'
+                : 'Gemini cherche 3 albums dans ta collection...'}
+            </div>
+          )}
+
+          {moodError && (
+            <p className="text-sm text-red-500 dark:text-red-400 mb-2">{moodError}</p>
+          )}
+
+          {!moodLoading && moodSuggestions.length > 0 && (
+            <div>
+              <div
+                className="flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto sm:overflow-visible snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onScroll={(e) => {
+                  const el = e.currentTarget;
+                  const card = el.firstElementChild;
+                  if (!card) return;
+                  const step = card.offsetWidth + 12; // gap-3
+                  setMoodSlide(Math.min(
+                    moodSuggestions.length - 1,
+                    Math.max(0, Math.round(el.scrollLeft / step))
+                  ));
+                }}
+              >
+                {moodSuggestions.map((suggestion) => {
+                  const release = discogsCollection.find((r) => String(r.id) === String(suggestion.albumId));
+                  if (!release) return null;
+                  return (
+                    <button
+                      key={suggestion.albumId}
+                      type="button"
+                      onClick={() => onAlbumClick(release.id)}
+                      className="text-left flex flex-col gap-3 p-3 bg-white dark:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer shrink-0 w-[85%] sm:w-auto sm:shrink snap-center"
+                    >
+                      <div className="w-full aspect-square relative bg-gray-50 dark:bg-gray-800 rounded-lg overflow-hidden">
+                        <Image
+                          src={release.basic_information.cover_image}
+                          alt={release.basic_information.title}
+                          layout="fill"
+                          objectFit="contain"
+                          className="rounded-lg"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold dark:text-white truncate text-sm sm:text-base">{release.basic_information.title}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 truncate">{release.basic_information.artists[0].name}</p>
+                        {albumRatings[release.id] && (
+                          <div className="flex items-center mt-1.5">
+                            <svg className="w-3.5 h-3.5 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                            <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                              {albumRatings[release.id].toFixed(1)}/10
+                            </span>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 leading-snug">{suggestion.explanation}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {moodSuggestions.length > 1 && (
+                <div className="flex justify-center gap-1.5 mt-3 sm:hidden" aria-hidden>
+                  {moodSuggestions.map((s, i) => (
+                    <span
+                      key={s.albumId}
+                      className={`h-1.5 rounded-full transition-all ${
+                        i === moodSlide ? 'w-4 bg-blue-500' : 'w-1.5 bg-gray-300 dark:bg-gray-600'
+                      }`}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <button onClick={handlePrev} className="text-lg font-bold dark:text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div 
-              className="flex items-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-lg p-2"
-              onClick={() => onAlbumClick(randomAlbum[carouselIndex].id)}
-            >
-              <div className="w-32 h-32 md:w-48 md:h-48 relative mr-4 flex-shrink-0">
-                <Image
-                  src={randomAlbum[carouselIndex].basic_information.cover_image}
-                  alt={`Pochette de ${randomAlbum[carouselIndex].basic_information.title}`}
-                  layout="fill"
-                  objectFit="cover"
-                  className="rounded shadow"
-                />
-              </div>
-              <div className="text-base md:text-xl">
-                <h3 className="font-bold dark:text-white text-sm md:text-lg">{randomAlbum[carouselIndex].basic_information.title}</h3>
-                <p className="dark:text-gray-300 text-sm md:text-base">{randomAlbum[carouselIndex].basic_information.artists[0].name}</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Année : {randomAlbum[carouselIndex].basic_information.year || 'N/A'}</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Genre : {randomAlbum[carouselIndex].basic_information.genres.join(', ') || 'N/A'}</p>
-                
-                {/* Note et valeur dans le carrousel - affichage seulement si disponibles */}
-                <div className="flex items-center gap-4 mt-2">
-                  {/* Note */}
-                  {albumRatings[randomAlbum[carouselIndex].id] && (
-                    <div className="flex items-center">
-                      <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                      </svg>
-                      <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
-                        {albumRatings[randomAlbum[carouselIndex].id].toFixed(1)}/10
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Valeur */}
-                  {valuesEnabled && albumValues[randomAlbum[carouselIndex].id] && (
-                    <div className="flex items-center">
-                      <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                      </svg>
-                      <span className="text-xs font-medium text-green-600 dark:text-green-400">
-                        {typeof albumValues[randomAlbum[carouselIndex].id] === 'number' ? `${albumValues[randomAlbum[carouselIndex].id].toFixed(2)} €` : albumValues[randomAlbum[carouselIndex].id]}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <button onClick={handleNext} className="text-lg font-bold dark:text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+          )}
         </div>
       )}
 
@@ -643,73 +580,220 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
       )}
       {discogsCollection.length > 0 && (
         <div>
-          <h1 className="text-3xl font-bold mt-8 mb-4 dark:text-white">Ma collection</h1>
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <p className="text-3xl font-bold text-blue-800 dark:text-blue-400 mt-1">
-                {discogsCollection.length} disques
-              </p>
-              {collectionValue && (
-                <div className="text-gray-600 dark:text-gray-400 mt-1">
-                  <p className="text-xl">
-                    Valeur médiane : <span className="font-bold text-xl">
-                      {collectionValue.median.toLocaleString()} {collectionValue.currency}
-                    </span>
-                  </p>
-                  <p className="text-xs">
-                    Valeur min-max : {collectionValue.minimum.toLocaleString()} - {collectionValue.maximum.toLocaleString()} {collectionValue.currency}
-                  </p>
-                </div>
-              )}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h1 className="text-2xl sm:text-3xl font-bold dark:text-white">Ma collection</h1>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setViewMode('collection')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                  viewMode === 'collection'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                Collection
+              </button>
+              <button
+                onClick={() => setViewMode('wishlist')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                  viewMode === 'wishlist'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                Wishlist
+              </button>
+              <button
+                onClick={() => setViewMode('stats')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                  viewMode === 'stats'
+                    ? 'bg-blue-500 text-white border-blue-500'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                Stats
+              </button>
             </div>
           </div>
-          {/* Déplacer les boutons de tri ici */}
-          <div className="flex mb-4 gap-2 flex-wrap">
-            <button 
-              onClick={() => handleSort('artist')} 
-              className={`px-3 py-1 rounded ${sortBy === 'artist' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-            >
-              Trier par artiste {sortBy === 'artist' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-            <button 
-              onClick={() => handleSort('year')} 
-              className={`px-3 py-1 rounded ${sortBy === 'year' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-            >
-              Trier par année {sortBy === 'year' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-            <button 
-              onClick={() => handleSort('rating')} 
-              className={`px-3 py-1 rounded ${sortBy === 'rating' ? 'bg-purple-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-            >
-              Trier par note {sortBy === 'rating' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-            <button 
-              onClick={() => handleSort('value')} 
-              disabled={!valuesEnabled}
-              className={`px-3 py-1 rounded ${sortBy === 'value' ? 'bg-green-500 text-white' : valuesEnabled ? 'bg-gray-200 dark:bg-gray-700 dark:text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'}`}
-            >
-              Trier par valeur {sortBy === 'value' && (sortOrder === 'asc' ? '↑' : '↓')}
-            </button>
-            <div className="flex items-center gap-2">
-              <button 
+          <div className={`flex flex-wrap gap-3 mb-4 ${viewMode !== 'collection' ? 'hidden' : ''}`}>
+            {/* Carte : nombre de disques */}
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 sm:px-6 py-3 shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">Collection</p>
+                <p className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400 leading-none">{discogsCollection.length} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">disques</span></p>
+              </div>
+            </div>
+
+            {/* Carte : valeur médiane */}
+            {collectionValue && (() => {
+              const parseMoney = (value) => {
+                if (value == null || value === '') return null;
+                if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+                let cleaned = String(value).trim().replace(/[^\d.,\-]/g, '');
+                if (!cleaned) return null;
+                const hasComma = cleaned.includes(',');
+                const hasDot = cleaned.includes('.');
+                if (hasComma && hasDot) {
+                  cleaned = cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')
+                    ? cleaned.replace(/\./g, '').replace(',', '.')
+                    : cleaned.replace(/,/g, '');
+                } else if (hasComma) {
+                  const parts = cleaned.split(',');
+                  cleaned = parts[parts.length - 1].length <= 2
+                    ? `${parts.slice(0, -1).join('')}.${parts[parts.length - 1]}`
+                    : cleaned.replace(/,/g, '');
+                }
+                const n = parseFloat(cleaned);
+                return Number.isFinite(n) ? n : null;
+              };
+              const median = parseMoney(collectionValue.median);
+              const minimum = parseMoney(collectionValue.minimum);
+              const maximum = parseMoney(collectionValue.maximum);
+              const currency = collectionValue.currency === 'EUR' || !collectionValue.currency
+                ? '€'
+                : collectionValue.currency;
+              if (median == null) return null;
+              return (
+              <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 sm:px-6 py-3 shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">Valeur médiane</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-400 leading-none">
+                    {median.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}{' '}
+                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{currency}</span>
+                  </p>
+                  {minimum != null && maximum != null && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {minimum.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} – {maximum.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} {currency}
+                    </p>
+                  )}
+                </div>
+              </div>
+              );
+            })()}
+          </div>
+          {viewMode === 'stats' ? (
+            <CollectionDashboard
+              collection={discogsCollection}
+              albumRatings={albumRatings}
+              albumValues={albumValues}
+              collectionValue={collectionValue}
+            />
+          ) : viewMode === 'wishlist' ? (
+            <WishlistPanel onAlbumClick={onAlbumClick} />
+          ) : (
+          <>
+          {/* Barre de tri — select sur mobile, boutons pill sur desktop */}
+          <div className="mb-4">
+            {/* Version mobile : selects natifs */}
+            <div className="flex gap-2 sm:hidden flex-wrap">
+              <select
+                value={sortBy}
+                onChange={(e) => { setSortBy(e.target.value); setSortOrder('asc'); }}
+                className="flex-1 px-3 py-2 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              >
+                <option value="artist">Artiste</option>
+                <option value="year">Année</option>
+                <option value="rating">Note</option>
+                {valuesEnabled && <option value="value">Valeur</option>}
+              </select>
+              <button
+                onClick={() => setSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+                className="px-3 py-2 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-mono"
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+              <button
                 onClick={() => fetchAlbumValues(valuesEnabled)}
                 disabled={isLoadingValues}
-                className="px-3 py-1 rounded bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white disabled:cursor-not-allowed"
+                className="px-3 py-2 rounded-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm disabled:cursor-not-allowed"
               >
-                {isLoadingValues ? `Récupération... (${valuesProgress.current}/${valuesProgress.total})` : valuesEnabled ? 'Mettre à jour les valeurs' : 'Récupérer les valeurs'}
+                {isLoadingValues ? `${valuesProgress.current}/${valuesProgress.total}` : valuesEnabled ? '↻ Valeurs' : '+ Valeurs'}
               </button>
-              {lastValuesUpdate && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Dernière mise à jour: {lastValuesUpdate}
-                </span>
-              )}
+              <button
+                onClick={() => setShowGenreFilters(!showGenreFilters)}
+                className={`px-3 py-2 rounded-full text-sm border ${showGenreFilters ? 'bg-green-500 text-white border-green-500' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white'}`}
+              >
+                Genres
+              </button>
+              <button
+                onClick={exportCollectionCsv}
+                className="px-3 py-2 rounded-full text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                Exporter
+              </button>
             </div>
-            <button
-              onClick={() => setShowGenreFilters(!showGenreFilters)}
-              className={`px-3 py-1 rounded ${showGenreFilters ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-700 dark:text-white'}`}
-            >
-              {showGenreFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
-            </button>
+
+            {/* Version desktop : boutons pill */}
+            <div className="hidden sm:flex gap-2 flex-wrap items-center">
+              {[
+                { key: 'artist', label: 'Artiste', color: 'blue' },
+                { key: 'year', label: 'Année', color: 'blue' },
+                { key: 'rating', label: 'Note', color: 'purple' },
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => handleSort(key)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
+                    sortBy === key
+                      ? color === 'purple'
+                        ? 'bg-purple-500 text-white border-purple-500 shadow-sm'
+                        : 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                      : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
+                  }`}
+                >
+                  {label} {sortBy === key && (sortOrder === 'asc' ? '↑' : '↓')}
+                </button>
+              ))}
+              <button
+                onClick={() => handleSort('value')}
+                disabled={!valuesEnabled}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
+                  sortBy === 'value'
+                    ? 'bg-green-500 text-white border-green-500 shadow-sm'
+                    : valuesEnabled
+                      ? 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-green-400'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600 border-gray-200 dark:border-gray-700 cursor-not-allowed'
+                }`}
+              >
+                Valeur {sortBy === 'value' && (sortOrder === 'asc' ? '↑' : '↓')}
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchAlbumValues(valuesEnabled)}
+                  disabled={isLoadingValues}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white border border-blue-500 transition-all duration-200 disabled:cursor-not-allowed"
+                >
+                  {isLoadingValues ? `Récupération... (${valuesProgress.current}/${valuesProgress.total})` : valuesEnabled ? 'Mettre à jour les valeurs' : 'Récupérer les valeurs'}
+                </button>
+                {lastValuesUpdate && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Mise à jour : {lastValuesUpdate}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setShowGenreFilters(!showGenreFilters)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${showGenreFilters ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-green-400'}`}
+              >
+                {showGenreFilters ? 'Masquer filtres' : 'Filtrer par genre'}
+              </button>
+              <button
+                onClick={exportCollectionCsv}
+                className="px-4 py-1.5 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
+              >
+                Exporter CSV
+              </button>
+            </div>
           </div>
           {showGenreFilters && (
             <div className="flex flex-wrap items-center mb-4">
@@ -733,33 +817,37 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-6">
             {sortedAndFilteredReleases.map((release) => (
               <div 
                 key={release.id} 
                 onClick={() => onAlbumClick(release.id)}
-                className="border dark:border-gray-700 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer"
+                className="group border dark:border-gray-700 rounded-lg overflow-hidden shadow hover:shadow-xl transition-all duration-300 cursor-pointer bg-white dark:bg-gray-800"
               >
-                <div className="relative w-full pb-[100%]">
+                <div className="relative w-full pb-[100%] overflow-hidden">
                   <Image
                     src={release.basic_information.cover_image}
                     alt={`Pochette de ${release.basic_information.title}`}
                     layout="fill"
                     objectFit="cover"
+                    className="transition-transform duration-300 group-hover:scale-105"
                   />
+                  {/* Overlay desktop au hover */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 hidden sm:flex items-center justify-center">
+                    <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
                 </div>
-                <div className="p-4 bg-white dark:bg-gray-800">
-                  <h3 className="font-bold text-sm truncate dark:text-white">{release.basic_information.artists[0].name}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{release.basic_information.title}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Année : {release.basic_information.year || 'N/A'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
-                    Genre : {release.basic_information.styles.join(', ') || 'N/A'}
+                <div className="p-2 sm:p-3">
+                  <h3 className="font-bold text-xs sm:text-sm truncate dark:text-white">{release.basic_information.artists[0].name}</h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{release.basic_information.title}</p>
+                  <p className="hidden sm:block text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {release.basic_information.year || 'N/A'} · {release.basic_information.styles.join(', ') || 'N/A'}
                   </p>
                   {albumRatings[release.id] && (
-                    <div className="mt-2 flex items-center">
-                      <svg className="w-4 h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                    <div className="mt-1.5 flex items-center">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 mr-1" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                       </svg>
                       <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">
@@ -769,7 +857,7 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
                   )}
                   {valuesEnabled && albumValues[release.id] && (
                     <div className="mt-1 flex items-center">
-                      <svg className="w-4 h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                       </svg>
                       <span className="text-xs font-medium text-green-600 dark:text-green-400">
@@ -781,6 +869,8 @@ const ClientHome = forwardRef(function ClientHome({ onAlbumClick }, ref) {
               </div>
             ))}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>

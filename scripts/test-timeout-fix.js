@@ -12,7 +12,7 @@ async function testTimeoutImprovements() {
   
   // Configuration Gemini
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
   
   // Test avec un prompt optimisé
   const testPrompt = `Critique musicale de 120-150 mots en français :

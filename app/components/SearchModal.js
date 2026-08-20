@@ -29,12 +29,12 @@ export default function SearchModal({ isOpen, onClose, discogsCollection }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className={`bg-white dark:bg-gray-800 w-full ${selectedAlbumId ? 'max-w-6xl max-h-screen overflow-auto' : 'max-w-2xl'} rounded-xl shadow-2xl p-8 relative`}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center">
+      <div className={`bg-white dark:bg-gray-800 w-full ${selectedAlbumId ? 'max-w-6xl max-h-[90dvh] sm:max-h-[85vh] overflow-y-auto' : 'max-w-2xl max-h-[90dvh] sm:max-h-[85vh] overflow-y-auto'} rounded-t-2xl sm:rounded-xl shadow-2xl p-4 sm:p-8 relative transition-all duration-300`}>
         {/* Bouton de fermeture repositionné */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group"
+          className="absolute top-4 right-4 z-10 w-10 h-10 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full flex items-center justify-center transition-all duration-200 group"
         >
           <svg className="w-5 h-5 text-gray-600 dark:text-gray-300 group-hover:text-gray-800 dark:group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />

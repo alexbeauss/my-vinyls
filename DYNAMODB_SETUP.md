@@ -61,3 +61,46 @@ aws dynamodb create-table \
 ```
 
 Une fois la table créée, le système de sauvegarde des critiques d'album fonctionnera automatiquement.
+
+---
+
+## Table Wishlist
+
+Pour la liste de vinyles à acheter.
+
+### Structure
+
+- **Nom** : `Wishlist`
+- **Clé de partition** : `userId` (String) — ID Auth0
+- **Clé de tri** : `itemId` (String) — ID Discogs ou `manual_<timestamp>`
+- **Mode de facturation** : On-demand
+
+### Attributs
+
+- `title`, `artist`, `year`, `coverImage`
+- `discogsId`, `discogsUrl`
+- `estimatedValue`, `currency` — prix Discogs VG+
+- `targetPrice` — prix cible utilisateur
+- `notes`, `genres`, `styles`
+- `createdAt`, `updatedAt`
+
+### Création via AWS CLI
+
+```bash
+aws dynamodb create-table \
+    --table-name Wishlist \
+    --attribute-definitions \
+        AttributeName=userId,AttributeType=S \
+        AttributeName=itemId,AttributeType=S \
+    --key-schema \
+        AttributeName=userId,KeyType=HASH \
+        AttributeName=itemId,KeyType=RANGE \
+    --billing-mode PAY_PER_REQUEST
+```
+
+Ou via le script :
+
+```bash
+node scripts/create-wishlist-table.js
+```
+
