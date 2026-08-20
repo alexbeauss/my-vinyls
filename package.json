@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=18.18.0",
-    "npm": ">=9.0.0"
+    "node": ">=18.18.0"
   },
   "scripts": {
     "dev": "next dev",
@@ -28,7 +27,7 @@
     "crypto-browserify": "^3.12.0",
     "disconnect": "^1.2.2",
     "https-browserify": "^1.0.0",
-    "next": "^15.0.1",
+    "next": "15.0.7",
     "next-themes": "^0.3.0",
     "quagga": "^0.6.16",
     "react": "^18",
@@ -54,8 +53,5 @@
     "util": false,
     "fs": false,
     "path": false
-  },
-  "engines": {
-    "node": ">=18.18.0"
   }
 }
